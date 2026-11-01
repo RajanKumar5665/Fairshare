@@ -1,7 +1,7 @@
 export default function Brand() {
   return (
     <div className="brand-lockup">
-      <span className="brand-mark">F</span>
+      <img className="brand-mark" src="/screenshot-wide.png" alt="" />
       <span>
         <strong>FairShare</strong>
         <small>Admin control</small>

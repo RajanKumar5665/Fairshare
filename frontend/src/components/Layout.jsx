@@ -66,7 +66,7 @@ export default function Layout({ children }) {
         aria-label="Main navigation"
       >
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">F</div>
+          <img className="brand-mark" src="/screenshot-wide.png" alt="" />
           FairShare
         </div>
 

@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['apple-touch-icon.png'],
+      includeAssets: ['screenshot-wide.png'],
       manifest: {
         name: 'FairShare - Expense Tracker',
         short_name: 'FairShare',
@@ -22,17 +22,17 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'screenshot-wide.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'screenshot-wide.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'screenshot-wide.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable',
@@ -44,14 +44,14 @@ export default defineConfig({
             short_name: 'Add',
             description: 'Quickly add a personal expense',
             url: '/?action=add',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
+            icons: [{ src: 'screenshot-wide.png', sizes: '192x192' }],
           },
           {
             name: 'View Rooms',
             short_name: 'Rooms',
             description: 'Open your shared rooms',
             url: '/rooms',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
+            icons: [{ src: 'screenshot-wide.png', sizes: '192x192' }],
           },
         ],
         categories: ['finance', 'productivity'],

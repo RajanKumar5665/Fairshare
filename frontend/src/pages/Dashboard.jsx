@@ -146,7 +146,7 @@ export default function Dashboard() {
       <div className="d-hero">
         <div className="d-hero-top">
           <div className="d-brand">
-            <div className="d-logo">F</div>
+            <img className="d-logo" src="/screenshot-wide.png" alt="" />
             <div>
               <div className="d-brand-name">FairShare</div>
               <div className="d-brand-sub">Loading…</div>
@@ -170,7 +170,7 @@ export default function Dashboard() {
       <section className="d-hero">
         <div className="d-hero-top">
           <div className="d-brand">
-            <div className="d-logo">F</div>
+            <img className="d-logo" src="/screenshot-wide.png" alt="" />
             <div>
               <div className="d-brand-name">FairShare</div>
               <div className="d-brand-sub">{formattedToday}</div>

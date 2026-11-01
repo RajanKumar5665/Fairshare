@@ -41,7 +41,7 @@ export default function InstallPrompt() {
   return (
     <aside className={`install-banner${hasBottomNav ? ' with-bottom-nav' : ''}`} aria-label="Install FairShare">
       <div className="install-banner-icon">
-        <img src="/pwa-192x192.png" alt="FairShare" />
+        <img src="/screenshot-wide.png" alt="FairShare" />
       </div>
       <div className="install-banner-text">
         <strong>{isIOS ? 'Add to Home Screen' : 'Install FairShare App'}</strong>

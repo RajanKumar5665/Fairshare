@@ -38,7 +38,7 @@
 .admin-root .brand-lockup strong, .admin-root .brand-lockup small { display: block; }
 .admin-root .brand-lockup strong { font-size: 1.05rem; letter-spacing: -.04em; }
 .admin-root .brand-lockup small { margin-top: 2px; color: #8498af; font-size: .68rem; }
-.admin-root .brand-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #53e1bd, #11765e); color: #06271f; font-weight: 800; font-size: 1.25rem; }
+.admin-root .brand-mark { display: block; width: 40px; height: 40px; border-radius: 12px; object-fit: cover; }
 
 .admin-root .admin-app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
 .admin-root .sidebar { display: flex; flex-direction: column; padding: 30px 18px 20px; border-right: 1px solid #1e3248; background: rgba(8, 18, 31, .8); }
@@ -148,4 +148,3 @@
   .admin-root .inline-actions { width: 100%; }
   .admin-root .inline-actions .button { flex: 1; }
 }
-

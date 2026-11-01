@@ -64,7 +64,7 @@ export async function openRazorpaySubscriptionCheckout({
     description: isOneRupee
       ? 'Room Creation & Flat Share Plan — First Month Offer (₹1)'
       : 'Room Plan Monthly Subscription Renewal (₹50)',
-    image: '/pwa-192x192.png',
+    image: '/screenshot-wide.png',
     order_id: orderData.orderId,
     handler: function (response) {
       // response: { razorpay_payment_id, razorpay_order_id, razorpay_signature }
