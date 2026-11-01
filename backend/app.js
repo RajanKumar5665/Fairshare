@@ -42,6 +42,7 @@ app.use(
 // ─── CORS ───────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   'https://fairshareblue.vercel.app',
+  'https://fairshare-blue.vercel.app',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
@@ -49,6 +50,10 @@ const allowedOrigins = [
   'http://127.0.0.1:5174',
   'http://127.0.0.1:5175',
 ].filter(Boolean);
+
+if (env.CLIENT_URL && !allowedOrigins.includes(env.CLIENT_URL)) {
+  allowedOrigins.push(env.CLIENT_URL);
+}
 
 const corsOptions = {
   origin: (origin, callback) => {

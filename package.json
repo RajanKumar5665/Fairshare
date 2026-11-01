@@ -1,0 +1,7 @@
+{
+  "name": "fairshare-api-deployment",
+  "private": true,
+  "workspaces": [
+    "backend"
+  ]
+}
