@@ -1,15 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { FcGoogle } from 'react-icons/fc';
 
 const GOOGLE_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
+let initializedClientId = null;
 
 export default function GoogleLoginButton({ redirectUrl = '/' }) {
   const { loginWithGoogle } = useAuth();
+  const loginWithGoogleRef = useRef(loginWithGoogle);
+  const redirectUrlRef = useRef(redirectUrl);
   const [ready, setReady] = useState(Boolean(window.google?.accounts?.id));
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const isConfigured = Boolean(clientId && clientId !== 'your_google_oauth_client_id');
+
+  useEffect(() => {
+    loginWithGoogleRef.current = loginWithGoogle;
+    redirectUrlRef.current = redirectUrl;
+  }, [loginWithGoogle, redirectUrl]);
 
   useEffect(() => {
     if (!isConfigured || ready) return undefined;
@@ -28,13 +36,15 @@ export default function GoogleLoginButton({ redirectUrl = '/' }) {
 
   useEffect(() => {
     if (!ready || !isConfigured) return;
+    if (initializedClientId === clientId) return;
+
     try {
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: async ({ credential }) => {
           try {
-            await loginWithGoogle(credential);
-            window.location.assign(redirectUrl);
+            await loginWithGoogleRef.current(credential);
+            window.location.assign(redirectUrlRef.current);
           } catch (error) {
             toast.error(error.message || 'Google login failed');
           }
@@ -42,10 +52,11 @@ export default function GoogleLoginButton({ redirectUrl = '/' }) {
         auto_select: false,
         cancel_on_tap_outside: true,
       });
+      initializedClientId = clientId;
     } catch (err) {
       console.warn('Google accounts initialize error:', err);
     }
-  }, [ready, isConfigured, clientId, redirectUrl, loginWithGoogle]);
+  }, [ready, isConfigured, clientId]);
 
   function startGoogleLogin() {
     if (!isConfigured) {
