@@ -3,10 +3,5 @@ import { env } from './env.js';
 
 export const logger = pino({
     level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-    ...(env.NODE_ENV === 'development' && {
-        transport: {
-            target: 'pino-pretty',
-            options: { colorize: true, translateTime: 'SYS:standard' },
-        },
-    }),
+    transport: env.NODE_ENV !== 'production' ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard' } } : undefined,
 });
