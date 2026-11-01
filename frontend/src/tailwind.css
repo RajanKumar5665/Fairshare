@@ -1,0 +1,11 @@
+
+@import "tailwindcss";
+
+@theme {
+  --color-hisab-brand: #1769E0;
+  --color-hisab-brand-soft: #E8F1FF;
+  --color-hisab-ink: #172B4D;
+  --color-hisab-muted: #64748B;
+
+  --font-sans: "DM Sans", system-ui, sans-serif;
+}
