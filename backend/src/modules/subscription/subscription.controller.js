@@ -36,14 +36,3 @@ export async function verifyRazorpayPayment(req, res, next) {
   }
 } 
 
-export async function processPayment(req, res, next) {
-  try {
-    const result = await subscriptionService.processPayment(req.userId, req.params.roomId, req.body);
-    res.json({ success: true, ...result });
-  } catch (err) {
-    next(err);
-  }
-}
-
-
-

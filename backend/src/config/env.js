@@ -21,7 +21,11 @@ const envSchema = Joi.object({
         .uri()
         .default('http://localhost:5173'),
 
-    COOKIE_DOMAIN: Joi.string().default('localhost'),
+    COOKIE_DOMAIN: Joi.when('NODE_ENV', {
+        is: 'production',
+        then: Joi.string().hostname().required(),
+        otherwise: Joi.string().default('localhost'),
+    }),
 
     // Twilio Verify Configuration
     TWILIO_ACCOUNT_SID: Joi.string()
@@ -69,6 +73,15 @@ if (error) {
         error.details.map((d) => d.message)
     );
 
+    process.exit(1);
+}
+
+if (
+    value.NODE_ENV === 'production' &&
+    (value.RAZORPAY_KEY_ID === 'rzp_test_placeholder' ||
+        value.RAZORPAY_KEY_SECRET === 'rzp_secret_placeholder')
+) {
+    console.error('Production cannot use placeholder Razorpay credentials.');
     process.exit(1);
 }
 

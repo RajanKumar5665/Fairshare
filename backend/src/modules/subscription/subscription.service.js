@@ -1,7 +1,4 @@
-import crypto from 'crypto';
 import { Subscription } from '../../models/subscription.model.js';
-import { Room } from '../../models/room.model.js';
-import { RoomMember } from '../../models/roomMember.js';
 import { User } from '../../models/user.model.js';
 import { env } from '../../config/env.js';
 import { createRazorpayOrder, verifyRazorpaySignature, isRazorpayReady } from '../../config/razorpay.js';
@@ -36,44 +33,6 @@ export async function getRoomSubscription(roomId) {
     await sub.save();
   }
 
-  return sub;
-}
-
-export async function processPayment(userId, roomId, data) {
-  const room = await Room.findById(roomId);
-  if (!room) throw new AppError('Room not found', 404);
-
-  let sub = await Subscription.findOne({ roomId });
-  if (!sub) {
-    sub = await Subscription.create({
-      roomId,
-      plan: 'pro_room',
-      priceInRupees: 50,
-      billingScope: 'room',
-    });
-  }
-
-  const amountRupees = data.amountRupees || 50;
-  const transactionId = data.transactionId || `TXN_${Date.now()}_${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-
-  // Server-side activation
-  const now = new Date();
-  const start = sub.currentPeriodEnd > now ? sub.currentPeriodEnd : now;
-  const newEnd = new Date(start);
-  newEnd.setMonth(newEnd.getMonth() + 1);
-
-  sub.status = 'active';
-  sub.isTrial = false;
-  sub.currentPeriodStart = start;
-  sub.currentPeriodEnd = newEnd;
-  sub.paymentHistory.push({
-    transactionId,
-    amountRupees,
-    paidAt: now,
-    paidBy: userId,
-  });
-
-  await sub.save();
   return sub;
 }
 

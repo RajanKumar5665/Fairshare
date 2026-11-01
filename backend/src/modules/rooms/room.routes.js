@@ -57,8 +57,6 @@ router.post('/:roomId/messages/:messageId/pin', requireRoomMember(), chatControl
 
 // ─── Subscription & Payment Control (Phase 10) ────────────────────────────────
 router.get('/:roomId/subscription', requireRoomMember(), subscriptionController.getSubscription);
-router.post('/:roomId/subscription/pay', requireRoomMember(['owner', 'admin']), subscriptionController.processPayment);
-
 router.get('/:roomId/members', requireRoomMember(), roomController.listMembers);
 router.delete('/:roomId/members/:userId', requireRoomMember(['owner', 'admin']), roomController.removeMember);
 router.patch('/:roomId/members/:userId/role', requireRoomMember(['owner']), roomController.updateMemberRole);

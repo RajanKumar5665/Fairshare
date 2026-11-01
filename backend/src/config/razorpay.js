@@ -36,8 +36,14 @@ const razorpay = new Razorpay({
   key_secret: env.RAZORPAY_KEY_SECRET,
 });
 
+const isMockCredential =
+  env.NODE_ENV === 'test' ||
+  (env.NODE_ENV !== 'production' &&
+    env.RAZORPAY_KEY_ID === 'rzp_test_placeholder' &&
+    env.RAZORPAY_KEY_SECRET === 'rzp_secret_placeholder');
+
 export function isRazorpayReady() {
-  return Boolean(razorpay);
+  return Boolean(razorpay) && !isMockCredential;
 }
 
 export function getRazorpayKeyId() {
@@ -57,6 +63,16 @@ export async function createRazorpayOrder({
     amountInPaise <= 0
   ) {
     throw new Error('Invalid payment amount');
+  }
+
+  if (isMockCredential) {
+    return {
+      orderId: `order_test_${crypto.randomBytes(12).toString('hex')}`,
+      amount: amountInPaise,
+      currency: 'INR',
+      keyId: env.RAZORPAY_KEY_ID,
+      isMock: true,
+    };
   }
 
   const order = await razorpay.orders.create({
@@ -85,6 +101,10 @@ export function verifyRazorpaySignature({
 }) {
   if (!orderId || !paymentId || !signature) {
     return false;
+  }
+
+  if (isMockCredential) {
+    return signature === 'test_signature';
   }
 
   try {

@@ -26,4 +26,7 @@ async function start() {
     });
 }
 
-start();
+start().catch((err) => {
+    logger.fatal({ err }, 'Server startup failed');
+    process.exit(1);
+});
