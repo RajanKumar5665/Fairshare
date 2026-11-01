@@ -32,7 +32,7 @@ async function connectDatabase() {
   return databasePromise;
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   setCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
@@ -49,4 +49,4 @@ module.exports = async function handler(req, res) {
       message: 'Internal server error',
     });
   }
-};
+}
