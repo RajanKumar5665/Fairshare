@@ -103,9 +103,10 @@ export async function refresh(req, res, next) {
 
     const { accessUserId, newRefreshToken } = await rotateRefreshToken(oldToken);
     const accessToken = generateAccessToken(accessUserId);
+    const user = await getUserById(accessUserId).catch(() => null);
 
     setRefreshCookie(res, newRefreshToken);
-    res.json({ success: true, accessToken, refreshToken: newRefreshToken });
+    res.json({ success: true, user, accessToken, refreshToken: newRefreshToken });
   } catch (err) {
     res.clearCookie('refreshToken', { ...cookieOptions, maxAge: 0 });
     res.status(401).json({ success: false, message: err.message || 'Invalid refresh token' });

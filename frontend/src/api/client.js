@@ -40,6 +40,9 @@ export function getRefreshToken() {
 export function clearAuthSession() {
   setAccessToken(null);
   setRefreshToken(null);
+  try {
+    localStorage.removeItem('fairshare_user');
+  } catch { /* ignore */ }
   window.dispatchEvent(new CustomEvent('auth:expired'));
 }
 

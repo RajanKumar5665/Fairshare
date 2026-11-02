@@ -7,11 +7,17 @@
     <meta name="description" content="FairShare helps you track personal expenses and split bills with friends, roommates, and travel groups." />
     <meta name="keywords" content="expense tracker, bill splitter, hisab, khata, split expenses, group expenses India" />
     <meta name="author" content="FairShare" />
-    <meta name="theme-color" content="#F3F7FF" />
+    <meta name="theme-color" content="#0f6e56" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FairShare" />
+
+    <!-- Performance: DNS Prefetch & Preconnect to Backend & Fonts -->
+    <link rel="dns-prefetch" href="https://backend-alpha-gules-21.vercel.app" />
+    <link rel="preconnect" href="https://backend-alpha-gules-21.vercel.app" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -23,9 +29,7 @@
     <link rel="icon" type="image/png" href="/screenshot-wide.png" />
     <link rel="apple-touch-icon" href="/screenshot-wide.png" />
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonts (Non-blocking with swap) -->
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap"
       rel="stylesheet"
@@ -33,8 +37,7 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- Razorpay Checkout SDK -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <!-- Razorpay Checkout SDK is loaded dynamically on demand in razorpay.js when payment is triggered -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

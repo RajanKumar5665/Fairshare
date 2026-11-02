@@ -15,9 +15,39 @@ function normalizeUser(user) {
   return { ...user, id: user.id || user._id };
 }
 
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem('fairshare_user');
+    return raw ? normalizeUser(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setStoredUser(user) {
+  try {
+    if (user) {
+      localStorage.setItem('fairshare_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('fairshare_user');
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const initialUser = getStoredUser();
+  const [user, setUserState] = useState(initialUser);
+  // If user has no credentials at all, loading is instantly false!
+  const hasCredentials = Boolean(getAccessToken() || getRefreshToken());
+  const [loading, setLoading] = useState(hasCredentials && !initialUser);
+
+  function setUser(newUser) {
+    const normalized = normalizeUser(newUser);
+    setUserState(normalized);
+    setStoredUser(normalized);
+  }
 
   // Listen for global auth expiration (automatic logout)
   useEffect(() => {
@@ -29,33 +59,56 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function boot() {
-      if (!getAccessToken()) {
-        try {
-          const data = await api('/api/auth/refresh', { method: 'POST' });
-          if (data.accessToken) {
-            setAccessToken(data.accessToken);
-          }
-          if (data.refreshToken) {
-            setRefreshToken(data.refreshToken);
-          }
-        } catch {
-          setLoading(false);
-          return;
-        }
+      const currentAccess = getAccessToken();
+      const currentRefresh = getRefreshToken();
+
+      // If no credentials exist in storage, complete immediately without cold-start network hit!
+      if (!currentAccess && !currentRefresh) {
+        if (isMounted) setLoading(false);
+        return;
       }
 
+      // Try quick session restore
       try {
+        if (!currentAccess && currentRefresh) {
+          const refreshData = await api('/api/auth/refresh', { method: 'POST' });
+          if (refreshData.accessToken) {
+            setAccessToken(refreshData.accessToken);
+          }
+          if (refreshData.refreshToken) {
+            setRefreshToken(refreshData.refreshToken);
+          }
+          if (refreshData.user && isMounted) {
+            setUser(refreshData.user);
+            setLoading(false);
+            return;
+          }
+        }
+
         const data = await api('/api/auth/me');
-        setUser(normalizeUser(data.user));
+        if (isMounted) {
+          setUser(data.user);
+        }
       } catch {
-        clearAuthSession();
-        setUser(null);
+        if (isMounted) {
+          clearAuthSession();
+          setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
+
     boot();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const value = useMemo(
@@ -70,7 +123,7 @@ export function AuthProvider({ children }) {
         });
         setAccessToken(data.accessToken);
         if (data.refreshToken) setRefreshToken(data.refreshToken);
-        setUser(normalizeUser(data.user));
+        setUser(data.user);
       },
 
       async login(payload) {
@@ -80,7 +133,7 @@ export function AuthProvider({ children }) {
         });
         setAccessToken(data.accessToken);
         if (data.refreshToken) setRefreshToken(data.refreshToken);
-        setUser(normalizeUser(data.user));
+        setUser(data.user);
       },
 
       async loginWithGoogle(idToken) {
@@ -90,7 +143,7 @@ export function AuthProvider({ children }) {
         });
         setAccessToken(data.accessToken);
         if (data.refreshToken) setRefreshToken(data.refreshToken);
-        setUser(normalizeUser(data.user));
+        setUser(data.user);
       },
 
       async sendOtp(mobile) {
@@ -108,7 +161,7 @@ export function AuthProvider({ children }) {
         if (data.accessToken) {
           setAccessToken(data.accessToken);
           if (data.refreshToken) setRefreshToken(data.refreshToken);
-          setUser(normalizeUser(data.user));
+          setUser(data.user);
         }
         return data;
       },
