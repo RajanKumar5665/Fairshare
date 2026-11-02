@@ -58,11 +58,11 @@ export async function api(path, options = {}) {
     credentials: 'include',
   });
 
-  if (
-    res.status === 401 &&
-    !path.includes('/auth/login') &&
-    !path.includes('/auth/register')
-  ) {
+  const isAuthRequest = path.includes('/auth/login') ||
+    path.includes('/auth/register') ||
+    path.includes('/auth/refresh');
+
+  if (res.status === 401 && !isAuthRequest) {
     try {
       const token = await refreshAccessToken();
       headers.Authorization = `Bearer ${token}`;
@@ -74,6 +74,7 @@ export async function api(path, options = {}) {
       });
     } catch {
       setAccessToken(null);
+      throw new Error('Your session expired. Please log in again.');
     }
   }
 
