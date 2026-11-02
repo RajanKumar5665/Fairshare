@@ -22,12 +22,32 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", 'https://accounts.google.com', 'https://www.gstatic.com'],
+        scriptSrc: [
+          "'self'",
+          'https://accounts.google.com',
+          'https://www.gstatic.com',
+          'https://checkout.razorpay.com',
+        ],
         styleSrc: ["'self'", 'https://fonts.googleapis.com', "'unsafe-inline'"],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'https:'],
-        connectSrc: ["'self'", env.CLIENT_URL, 'https://accounts.google.com', 'https://oauth2.googleapis.com', 'http://localhost:*', 'http://127.0.0.1:*', 'http://192.168.*:*', 'http://10.*:*'],
-        frameSrc: ["'self'", 'https://accounts.google.com'],
+        connectSrc: [
+          "'self'",
+          env.CLIENT_URL,
+          'https://accounts.google.com',
+          'https://oauth2.googleapis.com',
+          'https://api.razorpay.com',
+          'https://lumberjack.razorpay.com',
+          'http://localhost:*',
+          'http://127.0.0.1:*',
+          'http://192.168.*:*',
+          'http://10.*:*',
+        ],
+        frameSrc: [
+          "'self'",
+          'https://accounts.google.com',
+          'https://api.razorpay.com',
+        ],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : null,
       },
@@ -57,10 +77,11 @@ if (env.CLIENT_URL && !allowedOrigins.includes(env.CLIENT_URL)) {
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
+    // Allow requests with no origin (mobile apps, curl, Postman, serverless internal)
     if (!origin) return callback(null, true);
     if (
       allowedOrigins.includes(origin) ||
+      /\.vercel\.app$/.test(origin) ||
       (env.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin))
     ) {
       return callback(null, true);
@@ -69,7 +90,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token'],
 };
 
 app.use(cors(corsOptions));
@@ -104,16 +125,16 @@ app.use(
 );
 
 // ─── Health ─────────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({ success: true, message: 'API is running', env: env.NODE_ENV });
 });
 
-// ─── Routes ─────────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
-app.use('/api/rooms', roomRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/subscription', subscriptionRoutes);
-app.use('/api/admin', adminRoutes);
+// ─── Routes (Dual-mounted so both /api/... and direct /... work seamlessly on serverless) ────
+app.use(['/api/auth', '/auth'], authRoutes);
+app.use(['/api/rooms', '/rooms'], roomRoutes);
+app.use(['/api/expenses', '/expenses'], expenseRoutes);
+app.use(['/api/subscription', '/subscription'], subscriptionRoutes);
+app.use(['/api/admin', '/admin'], adminRoutes);
 
 // ─── Error Handling ─────────────────────────────────────────────────────────
 app.use(notFound);

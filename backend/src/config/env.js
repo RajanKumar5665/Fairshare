@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import Joi from 'joi';
 
@@ -14,18 +13,14 @@ const envSchema = Joi.object({
     JWT_ACCESS_SECRET: Joi.string().min(10).required(),
     JWT_REFRESH_SECRET: Joi.string().min(10).required(),
 
-    JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
+    JWT_ACCESS_EXPIRES_IN: Joi.string().default('7d'),
     JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
     CLIENT_URL: Joi.string()
         .uri()
         .default('http://localhost:5173'),
 
-    COOKIE_DOMAIN: Joi.when('NODE_ENV', {
-        is: 'production',
-        then: Joi.string().hostname().required(),
-        otherwise: Joi.string().default('localhost'),
-    }),
+    COOKIE_DOMAIN: Joi.string().optional().allow('', 'localhost'),
 
     // Twilio Verify Configuration
     TWILIO_ACCOUNT_SID: Joi.string()
@@ -45,7 +40,8 @@ const envSchema = Joi.object({
     // Razorpay Configuration
     RAZORPAY_MODE: Joi.string()
         .valid('test', 'live')
-        .default('test'),
+        .optional()
+        .allow(''),
 
     RAZORPAY_KEY_ID: Joi.string()
         .optional()
@@ -78,11 +74,12 @@ if (error) {
 
 if (
     value.NODE_ENV === 'production' &&
-    (value.RAZORPAY_KEY_ID === 'rzp_test_placeholder' ||
+    (!value.RAZORPAY_KEY_ID ||
+        value.RAZORPAY_KEY_ID === 'rzp_test_placeholder' ||
+        !value.RAZORPAY_KEY_SECRET ||
         value.RAZORPAY_KEY_SECRET === 'rzp_secret_placeholder')
 ) {
-    console.error('Production cannot use placeholder Razorpay credentials.');
-    process.exit(1);
+    console.warn('Warning: Production Razorpay credentials are not fully configured or using placeholders. Razorpay payments will return a descriptive error.');
 }
 
 export const env = value;

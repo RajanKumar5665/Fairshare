@@ -1,5 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { api, getAccessToken, setAccessToken } from '../api/client';
+import {
+  api,
+  getAccessToken,
+  setAccessToken,
+  getRefreshToken,
+  setRefreshToken,
+  clearAuthSession,
+} from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -12,22 +19,37 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Listen for global auth expiration (automatic logout)
+  useEffect(() => {
+    function onAuthExpired() {
+      setUser(null);
+    }
+    window.addEventListener('auth:expired', onAuthExpired);
+    return () => window.removeEventListener('auth:expired', onAuthExpired);
+  }, []);
+
   useEffect(() => {
     async function boot() {
       if (!getAccessToken()) {
         try {
           const data = await api('/api/auth/refresh', { method: 'POST' });
-          setAccessToken(data.accessToken);
+          if (data.accessToken) {
+            setAccessToken(data.accessToken);
+          }
+          if (data.refreshToken) {
+            setRefreshToken(data.refreshToken);
+          }
         } catch {
           setLoading(false);
           return;
         }
       }
+
       try {
         const data = await api('/api/auth/me');
         setUser(normalizeUser(data.user));
       } catch {
-        setAccessToken(null);
+        clearAuthSession();
         setUser(null);
       } finally {
         setLoading(false);
@@ -47,6 +69,7 @@ export function AuthProvider({ children }) {
           body: JSON.stringify(payload),
         });
         setAccessToken(data.accessToken);
+        if (data.refreshToken) setRefreshToken(data.refreshToken);
         setUser(normalizeUser(data.user));
       },
 
@@ -56,6 +79,7 @@ export function AuthProvider({ children }) {
           body: JSON.stringify(payload),
         });
         setAccessToken(data.accessToken);
+        if (data.refreshToken) setRefreshToken(data.refreshToken);
         setUser(normalizeUser(data.user));
       },
 
@@ -65,6 +89,7 @@ export function AuthProvider({ children }) {
           body: JSON.stringify({ idToken }),
         });
         setAccessToken(data.accessToken);
+        if (data.refreshToken) setRefreshToken(data.refreshToken);
         setUser(normalizeUser(data.user));
       },
 
@@ -82,6 +107,7 @@ export function AuthProvider({ children }) {
         });
         if (data.accessToken) {
           setAccessToken(data.accessToken);
+          if (data.refreshToken) setRefreshToken(data.refreshToken);
           setUser(normalizeUser(data.user));
         }
         return data;
@@ -89,9 +115,12 @@ export function AuthProvider({ children }) {
 
       async logout() {
         try {
-          await api('/api/auth/logout', { method: 'POST' });
+          await api('/api/auth/logout', {
+            method: 'POST',
+            body: JSON.stringify({ refreshToken: getRefreshToken() }),
+          });
         } finally {
-          setAccessToken(null);
+          clearAuthSession();
           setUser(null);
         }
       },

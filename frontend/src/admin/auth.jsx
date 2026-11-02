@@ -8,6 +8,15 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    function onAdminExpired() {
+      setUser(null);
+      setAccessToken(null);
+    }
+    window.addEventListener('admin:expired', onAdminExpired);
+    return () => window.removeEventListener('admin:expired', onAdminExpired);
+  }, []);
+
+  useEffect(() => {
     async function loadSession() {
       if (!getAccessToken()) {
         setLoading(false);
@@ -19,6 +28,7 @@ export function AuthProvider({ children }) {
         setUser(data.user);
       } catch {
         setAccessToken(null);
+        setUser(null);
       } finally {
         setLoading(false);
       }

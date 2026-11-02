@@ -10,7 +10,7 @@ const isSecureDeployment = env.NODE_ENV === 'production' || process.env.VERCEL =
 const cookieOptions = {
   httpOnly: true,
   secure: isSecureDeployment,
-  sameSite: isSecureDeployment ? 'none' : 'strict',
+  sameSite: isSecureDeployment ? 'none' : 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/',
 };
@@ -32,7 +32,7 @@ export async function register(req, res, next) {
     const { user, accessToken } = await registerUser(value);
     const refreshToken = await createRefreshToken(user.id.toString());
     setRefreshCookie(res, refreshToken);
-    res.status(201).json({ success: true, user, accessToken });
+    res.status(201).json({ success: true, user, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
@@ -47,11 +47,11 @@ export async function login(req, res, next) {
     const { user, accessToken } = await loginUser(value);
     const refreshToken = await createRefreshToken(user.id.toString());
     setRefreshCookie(res, refreshToken);
-    res.json({ success: true, user, accessToken });
+    res.json({ success: true, user, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
-  }
+}
 
 export async function adminRegister(req, res, next) {
   try {
@@ -60,7 +60,7 @@ export async function adminRegister(req, res, next) {
     const { user, accessToken } = await registerAdmin(value);
     const refreshToken = await createRefreshToken(user.id.toString());
     setRefreshCookie(res, refreshToken);
-    res.status(201).json({ success: true, user, accessToken });
+    res.status(201).json({ success: true, user, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
@@ -73,7 +73,7 @@ export async function adminLogin(req, res, next) {
     const { user, accessToken } = await loginAdmin(value);
     const refreshToken = await createRefreshToken(user.id.toString());
     setRefreshCookie(res, refreshToken);
-    res.json({ success: true, user, accessToken });
+    res.json({ success: true, user, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
@@ -81,7 +81,7 @@ export async function adminLogin(req, res, next) {
 
 // ─── Logout ────────────────────────────────────────────────────────────────
 export async function logout(req, res) {
-  const token = req.cookies.refreshToken;
+  const token = req.cookies?.refreshToken || req.body?.refreshToken || req.headers['x-refresh-token'];
   if (token) {
     try {
       // revoke the specific token from DB (best-effort)
@@ -96,14 +96,16 @@ export async function logout(req, res) {
 // ─── Refresh (with rotation) ───────────────────────────────────────────────
 export async function refresh(req, res, next) {
   try {
-    const oldToken = req.cookies.refreshToken;
-    if (!oldToken) return res.status(401).json({ success: false, message: 'No refresh token' });
+    const oldToken = req.cookies?.refreshToken || req.body?.refreshToken || req.headers['x-refresh-token'];
+    if (!oldToken) {
+      return res.status(401).json({ success: false, message: 'No refresh token provided' });
+    }
 
     const { accessUserId, newRefreshToken } = await rotateRefreshToken(oldToken);
     const accessToken = generateAccessToken(accessUserId);
 
     setRefreshCookie(res, newRefreshToken);
-    res.json({ success: true, accessToken });
+    res.json({ success: true, accessToken, refreshToken: newRefreshToken });
   } catch (err) {
     res.clearCookie('refreshToken', { ...cookieOptions, maxAge: 0 });
     res.status(401).json({ success: false, message: err.message || 'Invalid refresh token' });
@@ -175,7 +177,7 @@ export async function googleAuth(req, res, next) {
     const refreshToken = await createRefreshToken(user._id.toString());
     setRefreshCookie(res, refreshToken);
     const u = { id: user._id, name: user.name, email: user.email, role: user.role, avatar: user.avatar };
-    return res.json({ success: true, user: u, accessToken });
+    return res.json({ success: true, user: u, accessToken, refreshToken });
   } catch (err) {
     next(err);
   }
@@ -203,7 +205,7 @@ export async function otpVerify(req, res, next) {
       const refreshToken = await createRefreshToken(user._id.toString());
       setRefreshCookie(res, refreshToken);
       const u = { id: user._id, name: user.name, mobile: user.mobile, avatar: user.avatar };
-      return res.status(201).json({ success: true, user: u, accessToken });
+      return res.status(201).json({ success: true, user: u, accessToken, refreshToken });
     }
 
     // Existing user
@@ -215,6 +217,7 @@ export async function otpVerify(req, res, next) {
       success: true,
       user: { id: u._id, name: u.name, mobile: u.mobile, email: u.email, avatar: u.avatar },
       accessToken,
+      refreshToken,
     });
   } catch (err) {
     next(err);
