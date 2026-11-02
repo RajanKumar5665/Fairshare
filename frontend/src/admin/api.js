@@ -1,7 +1,8 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, '');
-const API_URL = configuredApiUrl
-  ? configuredApiUrl
-  : 'https://backend-alpha-gules-21.vercel.app';
+const API_URL = (
+  import.meta.env.PROD
+    ? 'https://backend-alpha-gules-21.vercel.app'
+    : (import.meta.env.VITE_API_URL || 'http://localhost:4000')
+).replace(/\/+$/, '');
 let accessToken = sessionStorage.getItem('adminAccessToken') || '';
 
 export function setAccessToken(token) {
