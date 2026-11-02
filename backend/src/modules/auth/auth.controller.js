@@ -6,14 +6,18 @@ import { createRefreshToken, rotateRefreshToken, revokeAllRefreshTokens } from '
 import { User } from '../../models/user.model.js';
 import { env } from '../../config/env.js';
 
+const isSecureDeployment = env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 const cookieOptions = {
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'strict',
-  domain: env.COOKIE_DOMAIN,
+  secure: isSecureDeployment,
+  sameSite: isSecureDeployment ? 'none' : 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/',
 };
+
+if (env.COOKIE_DOMAIN && env.COOKIE_DOMAIN !== 'localhost' && !process.env.VERCEL) {
+  cookieOptions.domain = env.COOKIE_DOMAIN;
+}
 
 function setRefreshCookie(res, token) {
   res.cookie('refreshToken', token, cookieOptions);
