@@ -1,4 +1,7 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const configuredApiUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, '');
+const API_URL = configuredApiUrl && configuredApiUrl !== 'https://fairshare-blue.vercel.app'
+  ? configuredApiUrl
+  : 'https://fairshare-wywl.onrender.com';
 let accessToken = sessionStorage.getItem('adminAccessToken') || '';
 
 export function setAccessToken(token) {
