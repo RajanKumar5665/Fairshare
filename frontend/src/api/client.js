@@ -1,9 +1,9 @@
 
 const configuredApiUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, '');
 const API_URL = (
-  configuredApiUrl && configuredApiUrl !== 'https://fairshare-blue.vercel.app'
+  configuredApiUrl
     ? configuredApiUrl
-    : 'https://fairshare-wywl.onrender.com'
+    : 'https://backend-alpha-gules-21.vercel.app'
 ).replace(/\/+$/, '');
 
 function buildApiUrl(path) {
