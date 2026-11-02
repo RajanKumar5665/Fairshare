@@ -1,7 +1,8 @@
 const API_URL = (
-  import.meta.env.PROD
-    ? 'https://backend-alpha-gules-21.vercel.app'
-    : (import.meta.env.VITE_API_URL || 'http://localhost:4000')
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD
+    ? 'https://fairshare-6011.onrender.com'
+    : 'http://localhost:4000')
 ).replace(/\/+$/, '');
 
 let accessToken = sessionStorage.getItem('adminAccessToken') || '';

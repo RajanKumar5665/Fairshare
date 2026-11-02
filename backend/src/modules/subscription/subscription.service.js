@@ -62,8 +62,11 @@ export async function getMySubscription(userId) {
 export async function initiateRazorpaySubscription(userId, { plan } = {}) {
   const user = await User.findById(userId);
   if (!user) throw new AppError('User not found', 404);
-  if (!isRazorpayReady() && process.env.NODE_ENV !== 'test') {
-    throw new AppError('Razorpay payment gateway configured nahi hai. Kripya backend/.env me valid RAZORPAY_KEY_ID aur RAZORPAY_KEY_SECRET daalein.', 400);
+  if (!isRazorpayReady() && env.NODE_ENV !== 'test') {
+    throw new AppError(
+      'Razorpay is not configured on the server. Set valid RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET environment variables on Render.',
+      503
+    );
   }
 
   const sub = user.roomSubscription || {};
@@ -95,7 +98,7 @@ export async function initiateRazorpaySubscription(userId, { plan } = {}) {
 }
 
 export async function confirmRazorpaySubscription(userId, { razorpay_order_id, razorpay_payment_id, razorpay_signature }) {
-  if (!razorpay_order_id || !razorpay_payment_id || (!razorpay_signature && process.env.NODE_ENV !== 'test')) {
+  if (!razorpay_order_id || !razorpay_payment_id || (!razorpay_signature && env.NODE_ENV !== 'test')) {
     throw new AppError('Missing Razorpay payment identifiers. Payment cannot be verified.', 400);
   }
 
