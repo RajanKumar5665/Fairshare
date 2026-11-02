@@ -2,9 +2,20 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { env } from './env.js';
 
-// Clean and trim credentials
-const rawKeyId = (env.RAZORPAY_KEY_ID || '').trim();
-const rawKeySecret = (env.RAZORPAY_KEY_SECRET || '').trim();
+function cleanCredential(value) {
+  const cleaned = String(value || '').trim();
+  if (
+    cleaned.length >= 2 &&
+    ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'")))
+  ) {
+    return cleaned.slice(1, -1).trim();
+  }
+  return cleaned;
+}
+
+const rawKeyId = cleanCredential(env.RAZORPAY_KEY_ID);
+const rawKeySecret = cleanCredential(env.RAZORPAY_KEY_SECRET);
 
 // Auto-detect mode if not explicitly set or if key prefix dictates it
 let mode = (env.RAZORPAY_MODE || '').trim().toLowerCase();
@@ -99,7 +110,10 @@ export async function createRazorpayOrder({
       apiErr?.description ||
       apiErr?.message ||
       'Razorpay order creation failed';
-    const err = new Error(`Razorpay Error: ${detail}`);
+    const message = /authentication failed/i.test(detail)
+      ? 'Razorpay authentication failed. RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be a matching pair from the same Razorpay mode (test or live).'
+      : `Razorpay Error: ${detail}`;
+    const err = new Error(message);
     err.statusCode = 400; // Returns 400 so production errorHandler does not mask it as 500 Internal server error
     throw err;
   }
