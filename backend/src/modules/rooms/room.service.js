@@ -16,18 +16,6 @@ class AppError extends Error {
 }
 
 export async function createRoom(userId, data) {
-  // Room creation requires an active Razorpay subscription.
-  if (process.env.NODE_ENV !== 'test') {
-    const user = await User.findById(userId);
-    const isSubscribed =
-      user?.roomSubscription?.status === 'active' &&
-      user.roomSubscription.validUntil &&
-      new Date(user.roomSubscription.validUntil) > new Date();
-    if (!isSubscribed) {
-      throw new AppError('Room create karne ke liye Razorpay subscription zaroori hai. Kripya pehle payment karein.', 402);
-    }
-  }
-
   const roomData = {
     name: data.name,
     description: data.description || '',

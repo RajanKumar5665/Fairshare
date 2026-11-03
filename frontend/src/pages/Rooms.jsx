@@ -72,13 +72,9 @@ export default function Rooms() {
   useEffect(() => { load(); }, []);
 
   // Click "Create Room" → show payment modal first if not subscribed
-  function handleCreateClick() {
-    if (!isSubscribed) {
-      setShowPaymentModal(true);
-      return;
-    }
-    setShowCreateModal(true);
-  }
+function handleCreateClick() {
+  setShowCreateModal(true);
+}
 
   async function handleRazorpayPayment() {
     setPayingWithRazorpay(true);
@@ -266,7 +262,7 @@ export default function Rooms() {
       </div>
 
       {/* ── Locked Warning Banner ────────────────────────── */}
-      {!isSubscribed && (
+      {false && (
         <div style={{ background: 'linear-gradient(135deg,var(--warn-soft) 0%,#fff9f0 100%)', border: '1.5px solid var(--warn)', borderRadius: 16, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--warn-soft)', border: '1.5px solid var(--warn)', display: 'grid', placeItems: 'center', color: 'var(--warn)', flexShrink: 0 }}>
@@ -479,20 +475,14 @@ export default function Rooms() {
                     </p>
                   </div>
 
-                  {/* Pay Button */}
                   <button
                     id="razorpay-pay-btn"
                     type="button"
                     className="btn-primary"
-                    disabled={payingWithRazorpay}
-                    onClick={handleRazorpayPayment}
-                    style={{ width: '100%', justifyContent: 'center', padding: '15px 18px', fontSize: '1.05rem', fontWeight: 800, boxShadow: '0 4px 20px rgba(15,110,86,0.3)', marginBottom: 12, gap: 8 }}
+                    disabled
+                    style={{ width: '100%', justifyContent: 'center', padding: '15px 18px', fontSize: '1.05rem', fontWeight: 800, marginBottom: 12, gap: 8 }}
                   >
-                    {payingWithRazorpay ? (
-                      <><span className="spinner" /> Opening Razorpay…</>
-                    ) : (
-                      <><MdOutlinePayment size={18} /> Pay {priceDisplay} with Razorpay</>
-                    )}
+                    Coming Soon
                   </button>
 
                   {/* Trust line */}
