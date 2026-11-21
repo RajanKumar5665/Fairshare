@@ -30,6 +30,11 @@ const settlementSchema = new mongoose.Schema(
     transactionRef: { type: String, default: "" },
     note: { type: String, default: "" },
     settledAt: { type: Date, default: Date.now },
+    // Month (YYYY-MM, IST) this payment settles. Set when paying from the
+    // month-end settle-up screen; falls back to settledAt when null.
+    forMonth: { type: String, default: null },
+    // Monthly cycle this payment settles (rooms only)
+    cycle: { type: Number, default: null },
     status: {
       type: String,
       enum: ["completed", "pending", "rejected", "reversed"],
@@ -59,6 +64,8 @@ const settlementSchema = new mongoose.Schema(
 
 settlementSchema.index({ roomId: 1, settledAt: -1 });
 settlementSchema.index({ roomId: 1, status: 1 });
+settlementSchema.index({ roomId: 1, forMonth: 1 });
+settlementSchema.index({ roomId: 1, cycle: 1 });
 settlementSchema.index({ paidBy: 1 });
 settlementSchema.index({ paidTo: 1 });
 

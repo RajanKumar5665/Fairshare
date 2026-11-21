@@ -16,7 +16,28 @@ import adminRoutes from './src/modules/admin/admin.routes.js';
 
 const app = express();
 
+// Behind Nginx in production: trust the first proxy so client IPs (rate limits,
+// secure cookies) are read from X-Forwarded-* correctly.
+if (env.NODE_ENV === 'production') app.set('trust proxy', 1);
+
 // ─── Security Headers (CSP via Helmet) ─────────────────────────────────────
+const isProd = env.NODE_ENV === 'production';
+
+// Dev me local/LAN testing ke liye, prod me nahi chahiye
+const devConnectSrc = isProd
+  ? []
+  : ['http://localhost:*', 'http://127.0.0.1:*'];
+
+const connectSrc = [
+  "'self'",
+  env.CLIENT_URL,
+  'https://accounts.google.com',
+  'https://oauth2.googleapis.com',
+  'https://api.razorpay.com',
+  'https://lumberjack.razorpay.com',
+  ...devConnectSrc,
+].filter(Boolean); // CLIENT_URL missing ho to skip
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -28,72 +49,48 @@ app.use(
           'https://www.gstatic.com',
           'https://checkout.razorpay.com',
         ],
-        styleSrc: ["'self'", 'https://fonts.googleapis.com', "'unsafe-inline'"],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https://fonts.googleapis.com',
+          'https://accounts.google.com',
+        ],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'https:'],
-        connectSrc: [
-          "'self'",
-          env.CLIENT_URL,
-          'https://accounts.google.com',
-          'https://oauth2.googleapis.com',
-          'https://api.razorpay.com',
-          'https://lumberjack.razorpay.com',
-          'http://localhost:*',
-          'http://127.0.0.1:*',
-          'http://192.168.*:*',
-          'http://10.*:*',
-        ],
+        connectSrc,
         frameSrc: [
           "'self'",
           'https://accounts.google.com',
           'https://api.razorpay.com',
         ],
         objectSrc: ["'none'"],
-        upgradeInsecureRequests: env.NODE_ENV === 'production' ? [] : null,
+        upgradeInsecureRequests: isProd ? [] : null,
       },
     },
-    crossOriginEmbedderPolicy: false, // allow PWA fetch
-    hsts: env.NODE_ENV === 'production'
+    crossOriginEmbedderPolicy: false, // PWA fetch ke liye
+    hsts: isProd
       ? { maxAge: 31536000, includeSubDomains: true, preload: true }
       : false,
   })
 );
 
-// ─── CORS ───────────────────────────────────────────────────────────────────
-const allowedOrigins = [
-  'https://fairshareblue.vercel.app',
-  'https://fairshare-blue.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174',
-  'http://127.0.0.1:5175',
-].filter(Boolean);
 
-if (env.CLIENT_URL && !allowedOrigins.includes(env.CLIENT_URL)) {
-  allowedOrigins.push(env.CLIENT_URL);
-}
+// Production: only CLIENT_URL + TRUSTED_ORIGINS (comma separated). Local: any origin.
+export const allowedOrigins = [env.CLIENT_URL, ...(env.TRUSTED_ORIGINS || '').split(',')]
+  .map((origin) => origin.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+export const corsOrigin = isProd ? allowedOrigins : true;
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman, serverless internal)
-    if (!origin) return callback(null, true);
-    if (
-      allowedOrigins.includes(origin) ||
-      /\.vercel\.app$/.test(origin) ||
-      (env.NODE_ENV === 'development' && /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin))
-    ) {
-      return callback(null, true);
-    }
-    return callback(new Error(`Origin ${origin} not allowed by CORS`));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token'],
-};
-
-app.use(cors(corsOptions));
+app.use(
+  cors({
+    origin: corsOrigin,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    exposedHeaders: ["Content-Disposition"],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
+  })
+);
 
 // ─── Body Parsing ───────────────────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));

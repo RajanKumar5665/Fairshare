@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { PHRASES } from '../i18n';
 
 const LanguageContext = createContext(null);
 
@@ -6,17 +7,17 @@ export const TRANSLATIONS = {
   en: {
     // Navigation
     navDashboard: 'Dashboard',
-    navRooms: 'Rooms & Flats',
-    navJoin: 'Join Room',
+    navRooms: 'Groups',
+    navJoin: 'Join group',
     navProfile: 'Profile',
     navHome: 'Home',
 
     // Rooms Page
-    roomsTitle: 'Rooms & Flats',
-    roomsSubtitle: 'Simplify shared flat expenses with your roommates',
-    createRoomBtn: 'Create Room',
+    roomsTitle: 'Your groups',
+    roomsSubtitle: 'Flats, trips and friend groups — split any expense, settle up easily',
+    createRoomBtn: 'Create group',
     oneRoomLimit: '1 Room Limit Active',
-    joinRoomCardTitle: 'Join a Room',
+    joinRoomCardTitle: 'Join a group',
     joinRoomCardDesc: 'Enter the invite link or code shared by your flatmate',
     pasteInvitePlaceholder: 'Paste Invite Link or Code here…',
     joinBtn: 'Join',
@@ -154,20 +155,20 @@ export const TRANSLATIONS = {
   hinglish: {
     // Navigation
     navDashboard: 'Dashboard',
-    navRooms: 'Rooms & Flats',
-    navJoin: 'Join Room',
+    navRooms: 'Groups',
+    navJoin: 'Group Join Karo',
     navProfile: 'Profile',
     navHome: 'Home',
 
     // Rooms Page
-    roomsTitle: 'Rooms & Flats',
+    roomsTitle: 'Aapke Groups',
     roomsSubtitle: 'Flatmates aur dosto ke sath room ka kharcha aasan banayein',
-    createRoomBtn: 'Room Banayein',
+    createRoomBtn: 'Group Banayein',
     oneRoomLimit: '1 Room Limit Active',
-    joinRoomCardTitle: 'Room Join Karein',
+    joinRoomCardTitle: 'Group Join Karein',
     joinRoomCardDesc: 'Roommate se mila link ya invite code yahan dalein',
     pasteInvitePlaceholder: 'Invite Link ya Code paste karein…',
-    joinBtn: 'Join',
+    joinBtn: 'Join Karo',
     joiningBtn: 'Joining…',
     roomPlanTitle: 'Room Plan',
     activePlanSub: 'Active Subscription (Room Creation Unlocked)',
@@ -187,7 +188,7 @@ export const TRANSLATIONS = {
     createFirstRoomBtn: 'Room Banayein',
 
     // Room Detail Page
-    backToRooms: 'Rooms',
+    backToRooms: 'Groups',
     inviteRoommatesBtn: 'Roommates Bulayein',
     addExpenseBtn: 'Kharcha Jodein',
     totalRoomExpense: 'Room Ka Total Kharcha',
@@ -302,17 +303,17 @@ export const TRANSLATIONS = {
   hi: {
     // Navigation
     navDashboard: 'डैशबोर्ड',
-    navRooms: 'कमरे और फ्लैट्स',
-    navJoin: 'कमरा जुड़ें',
+    navRooms: 'ग्रुप',
+    navJoin: 'ग्रुप जॉइन करें',
     navProfile: 'प्रोफ़ाइल',
     navHome: 'होम',
 
     // Rooms Page
-    roomsTitle: 'कमरे और फ्लैट्स',
+    roomsTitle: 'आपके ग्रुप',
     roomsSubtitle: 'फ्लैटमेट्स और दोस्तों के साथ कमरे का साझा खर्च आसान बनाएं',
-    createRoomBtn: 'कमरा बनाएं',
+    createRoomBtn: 'ग्रुप बनाएं',
     oneRoomLimit: '1 कमरा सीमा सक्रिय',
-    joinRoomCardTitle: 'कमरा जुड़ें',
+    joinRoomCardTitle: 'ग्रुप जॉइन करें',
     joinRoomCardDesc: 'अपने रूममेट द्वारा साझा किया गया लिंक या कोड यहां डालें',
     pasteInvitePlaceholder: 'इनवाइट लिंक या कोड यहां पेस्ट करें…',
     joinBtn: 'जुड़ें',
@@ -456,13 +457,25 @@ export function LanguageProvider({ children }) {
 
   useEffect(() => {
     localStorage.setItem('hh_lang', lang);
+    document.documentElement.lang = lang === 'hi' ? 'hi' : 'en';
   }, [lang]);
 
-  // Translation helper function
-  function t(key) {
-    const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
-    return dict[key] || TRANSLATIONS.en[key] || key;
-  }
+  /**
+   * t('navRooms')                 → named key from TRANSLATIONS
+   * t('Add expense')              → English text is its own key (PHRASES for hi/hinglish)
+   * t('{n} people', { n: 3 })     → placeholders filled in after translating
+   * Anything not translated yet falls back to English, never breaks.
+   */
+  const t = useCallback(
+    (key, vars) => {
+      if (key == null) return '';
+      const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
+      let out = dict[key] ?? TRANSLATIONS.en[key] ?? PHRASES[lang]?.[key] ?? key;
+      if (vars) out = String(out).replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
+      return out;
+    },
+    [lang],
+  );
 
   return (
     <LanguageContext.Provider value={{ lang, setLang, t }}>

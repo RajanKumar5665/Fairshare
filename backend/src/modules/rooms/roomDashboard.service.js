@@ -5,33 +5,34 @@ import { RecurringBill } from '../../models/recurringBill.model.js';
 import { Dispute } from '../../models/dispute.model.js';
 import { RoomMember } from '../../models/roomMember.js';
 import { getRoomBalances } from './room.service.js';
+import { monthKey, monthRange } from '../../utils/month.js';
+import { COUNTED_EXPENSE_STATUSES } from '../../utils/settlementPlanner.js';
 
 export async function getRoomDashboard(roomId) {
-  const now = new Date();
-  const currentMonthStart = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-  const currentMonthEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1));
-
-  const prevMonthStart = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1));
-  const prevMonthEnd = currentMonthStart;
+  const thisMonth = monthKey();
+  const { start: currentMonthStart, end: currentMonthEnd } = monthRange(thisMonth);
+  const [y, m] = thisMonth.split('-').map(Number);
+  const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+  const { start: prevMonthStart, end: prevMonthEnd } = monthRange(prevMonth);
 
   // 1. Current Month & Previous Month Spending
   const [currentMonthExpenses, prevMonthExpenses, allActiveExpenses] = await Promise.all([
     Expense.find({
       roomId,
       type: 'shared',
-      status: { $ne: 'cancelled' },
+      status: { $in: COUNTED_EXPENSE_STATUSES },
       expenseDate: { $gte: currentMonthStart, $lt: currentMonthEnd },
     }).lean(),
     Expense.find({
       roomId,
       type: 'shared',
-      status: { $ne: 'cancelled' },
+      status: { $in: COUNTED_EXPENSE_STATUSES },
       expenseDate: { $gte: prevMonthStart, $lt: prevMonthEnd },
     }).lean(),
     Expense.find({
       roomId,
       type: 'shared',
-      status: { $ne: 'cancelled' },
+      status: { $in: COUNTED_EXPENSE_STATUSES },
     })
       .populate('paidBy', 'name mobile')
       .sort({ expenseDate: -1 })
@@ -109,7 +110,7 @@ export async function getRoomDashboard(roomId) {
       name: b.name,
       netPaise: b.netPaise,
       totalPaidPaise: b.totalPaidPaise,
-      totalOwedPaise: b.totalOwedPaise,
+      totalOwedPaise: b.totalShareOwedPaise,
       receivablePaise: b.receivablePaise,
       payablePaise: b.payablePaise,
       isCurrentMember: b.isCurrentMember,

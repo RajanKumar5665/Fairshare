@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { protect } from '../../middlewares/auth.middleware.js';
 import { requireRoomMember } from '../../middlewares/room.middleware.js';
 import * as roomController from './room.controller.js';
@@ -10,15 +11,24 @@ import * as subscriptionController from '../subscription/subscription.controller
 
 const router = Router();
 
+// Invite codes are short, so limit how fast anyone can try them.
+const inviteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many invite attempts. Please wait a few minutes.' },
+});
+
 // Public invitation preview route (safe preview, no authentication required)
-router.get('/invitations/info', roomController.getInvitationInfo);
+router.get('/invitations/info', inviteLimiter, roomController.getInvitationInfo);
 
 // All following routes require authentication
 router.use(protect);
 
 router.post('/', roomController.createRoom);
 router.get('/', roomController.listRooms);
-router.post('/join', roomController.join);
+router.post('/join', inviteLimiter, roomController.join);
 
 router.get('/:roomId', requireRoomMember(), roomController.getRoom);
 router.patch('/:roomId', requireRoomMember(['owner', 'admin']), roomController.updateRoom);
@@ -27,6 +37,11 @@ router.post('/:roomId/leave', requireRoomMember(), roomController.leaveRoom);
 router.post('/:roomId/transfer-ownership', requireRoomMember(['owner']), roomController.transferOwnership);
 
 router.get('/:roomId/expenses', requireRoomMember(), roomController.listExpenses);
+router.post('/:roomId/expenses/:expenseId/review', requireRoomMember(), expenseController.reviewExpense);
+router.get('/:roomId/monthly-report', requireRoomMember(), expenseController.getMonthlyReport);
+router.get('/:roomId/cycles', requireRoomMember(), roomController.getCycles);
+router.post('/:roomId/cycles/close', requireRoomMember(['owner']), roomController.closeCycleNow);
+router.post('/:roomId/finish', requireRoomMember(['owner']), roomController.finishGroup);
 router.get('/:roomId/balances', requireRoomMember(), roomController.getBalances);
 router.get('/:roomId/suggestions', requireRoomMember(), expenseController.getSuggestedSettlements);
 router.get('/:roomId/settlements', requireRoomMember(), expenseController.listRoomSettlements);
@@ -61,6 +76,7 @@ router.get('/:roomId/members', requireRoomMember(), roomController.listMembers);
 router.delete('/:roomId/members/:userId', requireRoomMember(['owner', 'admin']), roomController.removeMember);
 router.patch('/:roomId/members/:userId/role', requireRoomMember(['owner']), roomController.updateMemberRole);
 
+// Invites are owner-only: only the person who created the group can invite.
 router.post('/:roomId/invitations', requireRoomMember(['owner']), roomController.invite);
 router.get('/:roomId/invitations', requireRoomMember(['owner']), roomController.listInvitations);
 router.delete('/:roomId/invitations/:invitationId', requireRoomMember(['owner']), roomController.revokeInvitation);

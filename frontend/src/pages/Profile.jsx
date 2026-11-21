@@ -107,8 +107,8 @@ export default function Profile() {
   ];
 
   return (
-    <section className="profile-page">
-      <div className="mb-6 flex items-start justify-between gap-4">
+    <section className="profile-page d-page">
+      <div className="page-header">
         <div>
           <h1>{t('profileTitle')}</h1>
           <p className="muted subtitle">{t('profileSubtitle')}</p>
@@ -274,7 +274,7 @@ export default function Profile() {
                   style={{
                     fontSize: '1.9rem',
                     fontWeight: 800,
-                    color: 'var(--text)',
+                    color: 'var(--ink)',
                     marginBottom: 8,
                   }}
                 >
@@ -287,7 +287,7 @@ export default function Profile() {
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr',
                     gap: 10,
-                    background: 'var(--card-bg)',
+                    background: 'var(--card)',
                     borderRadius: 10,
                     padding: 10,
                   }}
@@ -465,46 +465,25 @@ export default function Profile() {
           </div>
 
           {/* Theme Toggle */}
-          <div
-            style={{
-              background: 'var(--bg)',
-              borderRadius: 14,
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              border: '1px solid var(--line)',
-            }}
+          <button
+            type="button"
+            className="settings-row"
             onClick={toggle}
-            role="button"
-            tabIndex={0}
             id="profile-theme-toggle"
-            onKeyDown={(e) => e.key === 'Enter' && toggle()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="settings-row-copy">
               {theme === 'dark' ? <HiSun size={20} /> : <HiMoon size={20} />}
               <div>
                 <div className="text-sm font-bold">
                   {theme === 'dark' ? 'Light mode' : 'Dark mode'}
                 </div>
-                <div className="text-xs muted">Click to switch theme</div>
+                <div className="text-xs muted">Switch appearance</div>
               </div>
             </div>
-            <div
-              className="toggle-pill"
-              style={{
-                background: theme === 'dark' ? 'var(--brand)' : 'rgba(0,0,0,0.1)',
-              }}
-            >
-              <div
-                className="toggle-knob"
-                style={{
-                  transform: theme === 'dark' ? 'translateX(16px)' : 'none',
-                }}
-              />
-            </div>
-          </div>
+            <span className={`settings-switch ${theme === 'dark' ? 'on' : ''}`} aria-hidden="true">
+              <span className="settings-switch-knob" />
+            </span>
+          </button>
 
           {/* Logout */}
           <button

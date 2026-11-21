@@ -3,3 +3,12 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Never commit server keys, backups or generated files
+*.pem
+*.key
+*.zip
+.env.local
+.env.*.local
+frontend/dev-dist/
+coverage/

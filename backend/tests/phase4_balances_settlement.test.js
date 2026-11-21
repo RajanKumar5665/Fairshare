@@ -106,7 +106,8 @@ describe('Phase 4 — Automatic Balances & Settlement Ledger', () => {
     const { error, value } = recordSettlementSchema.validate(validUPI);
     assert.equal(error, undefined);
     assert.equal(value.paymentMethod, 'upi');
-    assert.equal(value.status, 'completed');
+    // Status is decided server-side (payer-recorded payments wait for the receiver to confirm)
+    assert.equal(value.status, undefined);
 
     const invalid = {
       roomId: '507f1f77bcf86cd799439011',

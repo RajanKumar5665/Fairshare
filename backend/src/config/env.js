@@ -82,4 +82,8 @@ if (
     console.warn('Warning: Production Razorpay credentials are not fully configured or using placeholders. Razorpay payments will return a descriptive error.');
 }
 
+if (value.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/.test(value.CLIENT_URL)) {
+    console.warn('Warning: CLIENT_URL points to localhost in production. Set it to your frontend URL (e.g. https://yourdomain.com) or the browser will be blocked by CORS.');
+}
+
 export const env = value;

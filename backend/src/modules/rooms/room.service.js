@@ -7,6 +7,25 @@ import { ExpenseParticipant } from '../../models/expenseParticipant.model.js';
 import { Settlement } from '../../models/settlement.model.js';
 import { User } from '../../models/user.model.js';
 import { rupeesToPaise } from '../../utils/money.js';
+import { isValidMonth, monthLabel, monthRange } from '../../utils/month.js';
+import { RoomCycle } from '../../models/roomCycle.model.js';
+import { OPEN_END, firstCycleStart } from '../../utils/cycle.js';
+import {
+  COUNTED_EXPENSE_STATUSES,
+  buildLedger,
+  planSettlements,
+} from '../../utils/settlementPlanner.js';
+
+/** Expenses still waiting on this person (as payer or as an approver). */
+async function countPendingApprovalsFor(roomId, userId) {
+  const pendingIds = await Expense.find({ roomId, status: 'pending_review' }).distinct('_id');
+  if (!pendingIds.length) return 0;
+  const [asPayer, asReviewer] = await Promise.all([
+    Expense.countDocuments({ _id: { $in: pendingIds }, paidBy: userId }),
+    ExpenseParticipant.countDocuments({ expenseId: { $in: pendingIds }, userId, reviewStatus: 'pending' }),
+  ]);
+  return asPayer + asReviewer;
+}
 
 class AppError extends Error {
   constructor(message, statusCode) {
@@ -16,17 +35,25 @@ class AppError extends Error {
 }
 
 export async function createRoom(userId, data) {
+  const type = data.type || 'room';
   const roomData = {
     name: data.name,
+    type,
     description: data.description || '',
     address: data.address || '',
     currency: data.currency || 'INR',
     customCategories: data.customCategories || [],
-    settings: data.settings || { allowMemberInvite: true, defaultSplitMethod: 'equal' },
+    settings: {
+      allowMemberInvite: false, // invites are owner-only
+      requireApproval: data.settings?.requireApproval ?? true,
+      defaultSplitMethod: data.settings?.defaultSplitMethod || 'equal',
+    },
+    startDate: type === 'trip' ? data.startDate || null : null,
+    endDate: type === 'trip' ? data.endDate || null : null,
     createdBy: userId,
   };
 
-  if (data.monthlyRent !== undefined) {
+  if (type === 'room' && data.monthlyRent !== undefined) {
     roomData.monthlyRentInSmallestUnit = rupeesToPaise(Number(data.monthlyRent));
   }
 
@@ -39,17 +66,9 @@ export async function createRoom(userId, data) {
     membershipStartDate: new Date(),
   });
 
-  // Auto-generate invite token for instant sharing
-  const rawToken = crypto.randomBytes(16).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  await RoomInvitation.create({
-    roomId: room._id,
-    invitedBy: userId,
-    tokenHash,
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-  });
-
-  return { ...room.toObject(), inviteToken: rawToken };
+  // Ready-to-share group link so the creator can invite everyone at once.
+  const invite = await createShareInvite(room._id, userId);
+  return { ...room.toObject(), inviteToken: invite.code };
 }
 
 export async function getUserRooms(userId) {
@@ -65,10 +84,30 @@ export async function getUserRooms(userId) {
   const countMap = new Map(memberCounts.map((mc) => [mc._id.toString(), mc.count]));
   const roleMap = new Map(memberships.map((m) => [m.roomId.toString(), m.role]));
 
+  // Expenses in each room that are waiting for *my* approval
+  const myPendingRows = await ExpenseParticipant.find({ userId, reviewStatus: 'pending' })
+    .select('expenseId')
+    .lean();
+  const pendingByRoom = new Map();
+  if (myPendingRows.length) {
+    const pendingExpenses = await Expense.find({
+      _id: { $in: myPendingRows.map((r) => r.expenseId) },
+      roomId: { $in: roomIds },
+      status: 'pending_review',
+    })
+      .select('roomId')
+      .lean();
+    for (const e of pendingExpenses) {
+      const key = e.roomId.toString();
+      pendingByRoom.set(key, (pendingByRoom.get(key) || 0) + 1);
+    }
+  }
+
   return rooms.map((room) => ({
     ...room.toObject(),
     myRole: roleMap.get(room._id.toString()),
     memberCount: countMap.get(room._id.toString()) || 1,
+    myPendingApprovals: pendingByRoom.get(room._id.toString()) || 0,
   }));
 }
 
@@ -84,8 +123,15 @@ export async function updateRoom(roomId, data) {
     updateData.monthlyRentInSmallestUnit = rupeesToPaise(Number(data.monthlyRent));
     delete updateData.monthlyRent;
   }
+  // Update individual settings keys; assigning `settings` wholesale would wipe the others.
+  if (data.settings) {
+    delete updateData.settings;
+    for (const [key, val] of Object.entries(data.settings)) {
+      updateData[`settings.${key}`] = val;
+    }
+  }
 
-  const room = await Room.findByIdAndUpdate(roomId, updateData, { new: true });
+  const room = await Room.findByIdAndUpdate(roomId, updateData, { returnDocument: 'after' });
   if (!room) throw new AppError('Room not found', 404);
   return room;
 }
@@ -95,7 +141,7 @@ export async function deleteRoom(roomId, userRole) {
   if (userRole !== 'superadmin' && process.env.NODE_ENV !== 'test') {
     throw new AppError('Room delete karne ki suvidha users ke liye band hai. Room data surakshit hai aur admin panel dwara managed hai.', 403);
   }
-  const room = await Room.findByIdAndUpdate(roomId, { status: 'archived' }, { new: true });
+  const room = await Room.findByIdAndUpdate(roomId, { status: 'archived' }, { returnDocument: 'after' });
   if (!room) throw new AppError('Room not found', 404);
   return room;
 }
@@ -119,6 +165,10 @@ export async function removeMember(roomId, targetUserId, requesterId, { allowAdm
     if (!requester || !['owner', 'admin'].includes(requester.role)) {
       throw new AppError('Insufficient permissions', 403);
     }
+  }
+
+  if (!allowAdmin && (await countPendingApprovalsFor(roomId, targetUserId)) > 0) {
+    throw new AppError('This member has expenses waiting for approval. Approve, reject or delete them first.', 400);
   }
 
   // Check if member has outstanding balances
@@ -189,6 +239,10 @@ export async function leaveRoom(roomId, userId) {
     }
   }
 
+  if ((await countPendingApprovalsFor(roomId, userId)) > 0) {
+    throw new AppError('You have expenses waiting for approval in this room. Approve, reject or delete them before leaving.', 400);
+  }
+
   // Check outstanding balance
   const balances = await getRoomBalances(roomId);
   const myBalance = balances.find((b) => b.userId.toString() === userId.toString());
@@ -215,52 +269,117 @@ export async function leaveRoom(roomId, userId) {
   return { success: true, message: 'You have left the room' };
 }
 
-export async function createInvitation(roomId, invitedBy, { invitedEmail = null, expiresInDays = 7 } = {}) {
-  // Sirf room ka creator / owner hi naye roommates ko invite kar sakta hai
-  const member = await RoomMember.findOne({ roomId, userId: invitedBy, status: 'active' });
-  if (!member) throw new AppError('Not an active member of this room', 403);
+// ─── Invites ──────────────────────────────────────────────────────────────────
+// Each group has ONE shareable invite (short code + link) that any number of
+// friends can use — share it once in the WhatsApp group and everyone can join.
 
-  const room = await Room.findById(roomId);
-  if (!room) throw new AppError('Room not found', 404);
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I confusion
+const INVITE_DAYS = 90;
 
-  const isOwner = member.role === 'owner' || (room.createdBy && room.createdBy.toString() === invitedBy.toString());
-  if (!isOwner) {
-    throw new AppError('Sirf room create karne wala (Owner) hi roommates ko invite kar sakta hai.', 403);
+function generateInviteCode(length = 10) {
+  let out = '';
+  for (let i = 0; i < length; i++) out += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+  return out;
+}
+
+const hashToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
+
+/** Accepts a code ("ABCD-EFGH-JK", any case/spaces) or an old long hex token. */
+async function findInvitation(rawInput) {
+  if (!rawInput || typeof rawInput !== 'string') return null;
+  const trimmed = rawInput.trim();
+  const compact = trimmed.replace(/[\s-]/g, '').toUpperCase();
+  const hashes = [...new Set([trimmed, compact].filter(Boolean).map(hashToken))];
+  return RoomInvitation.findOne({ tokenHash: { $in: hashes } }).sort({ createdAt: -1 });
+}
+
+/** Why an invitation can't be used right now, or null if it can. */
+function invitationProblem(invitation) {
+  if (!invitation) return 'Invalid invite code or link';
+  if (invitation.status === 'revoked') return 'This invite link was reset by the group admin. Ask for the new one.';
+  if (invitation.expiresAt < new Date()) return 'This invite link has expired. Ask for a new one.';
+  if (invitation.maxUses && invitation.useCount >= invitation.maxUses) return 'This invite link has been used up';
+  return null;
+}
+
+/** Only the person who created the group (the owner) may invite people. */
+async function assertCanInvite(roomId, userId) {
+  const member = await RoomMember.findOne({ roomId, userId, status: 'active' });
+  if (!member) throw new AppError('Not an active member of this group', 403);
+  const room = await Room.findById(roomId).select('status');
+  if (!room || room.status === 'archived') throw new AppError('Group not found', 404);
+  if (member.role !== 'owner') {
+    throw new AppError('Only the person who created this group can invite people', 403);
   }
+}
 
-  const rawToken = crypto.randomBytes(24).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const days = Math.max(1, Math.min(30, Number(expiresInDays) || 7));
-  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-
-  await RoomInvitation.create({
+async function createShareInvite(roomId, invitedBy) {
+  const code = generateInviteCode();
+  return RoomInvitation.create({
     roomId,
     invitedBy,
-    invitedEmail: invitedEmail ? invitedEmail.toLowerCase().trim() : null,
-    tokenHash,
-    expiresAt,
+    code,
+    tokenHash: hashToken(code),
+    expiresAt: new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000),
     status: 'pending',
   });
+}
 
-  return rawToken;
+function shareInviteView(invitation) {
+  return {
+    token: invitation.code,
+    code: invitation.code,
+    expiresAt: invitation.expiresAt,
+    useCount: invitation.useCount || 0,
+  };
+}
+
+/**
+ * Get the group's current shareable invite (creating one if needed). Owner only.
+ * `reset` revokes the old link so it stops working.
+ */
+export async function getShareInvite(roomId, userId, { reset = false } = {}) {
+  await assertCanInvite(roomId, userId);
+
+  const active = await RoomInvitation.findOne({
+    roomId,
+    code: { $ne: null },
+    status: 'pending',
+    maxUses: null,
+    expiresAt: { $gt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+  }).sort({ createdAt: -1 });
+
+  if (active && !reset) return shareInviteView(active);
+
+  if (reset) {
+    await RoomInvitation.updateMany(
+      { roomId, status: { $in: ['pending', 'accepted'] } },
+      { status: 'revoked', revokedAt: new Date() },
+    );
+  }
+  return shareInviteView(await createShareInvite(roomId, userId));
+}
+
+// Kept for older callers: now returns the reusable code.
+export async function createInvitation(roomId, invitedBy, options = {}) {
+  return (await getShareInvite(roomId, invitedBy, options)).code;
 }
 
 export async function listInvitations(roomId) {
-  const invitations = await RoomInvitation.find({
+  return RoomInvitation.find({
     roomId,
-    status: 'pending',
+    status: { $in: ['pending', 'accepted'] },
     expiresAt: { $gt: new Date() },
   })
+    .select('-tokenHash')
     .populate('invitedBy', 'name email')
     .sort({ createdAt: -1 });
-
-  return invitations;
 }
 
 export async function revokeInvitation(roomId, invitationId) {
   const invitation = await RoomInvitation.findOne({ _id: invitationId, roomId });
   if (!invitation) throw new AppError('Invitation not found', 404);
-  if (invitation.status !== 'pending') throw new AppError('Invitation is no longer pending', 400);
+  if (invitation.status === 'revoked') throw new AppError('Invitation is already revoked', 400);
 
   invitation.status = 'revoked';
   invitation.revokedAt = new Date();
@@ -270,64 +389,47 @@ export async function revokeInvitation(roomId, invitationId) {
 
 export async function getInvitationInfo(rawToken) {
   if (!rawToken || typeof rawToken !== 'string') {
-    throw new AppError('Invite token is required', 400);
+    throw new AppError('Invite code is required', 400);
   }
+  const invitation = await findInvitation(rawToken);
+  const problem = invitationProblem(invitation);
+  if (problem) return { valid: false, message: problem };
 
-  const tokenHash = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
-  const invitation = await RoomInvitation.findOne({ tokenHash })
-    .populate('roomId', 'name description currency')
-    .populate('invitedBy', 'name');
-
-  if (!invitation) {
-    return { valid: false, message: 'Invalid invitation link' };
+  await invitation.populate([
+    { path: 'roomId', select: 'name description currency type status' },
+    { path: 'invitedBy', select: 'name' },
+  ]);
+  if (!invitation.roomId || invitation.roomId.status === 'archived') {
+    return { valid: false, message: 'This group no longer exists' };
   }
+  const memberCount = await RoomMember.countDocuments({ roomId: invitation.roomId._id, status: 'active' });
 
-  if (invitation.status === 'revoked') {
-    return { valid: false, message: 'This invitation has been revoked' };
-  }
-
-  if (invitation.status === 'accepted') {
-    return { valid: false, message: 'This invitation has already been used' };
-  }
-
-  if (invitation.expiresAt < new Date()) {
-    if (invitation.status === 'pending') {
-      invitation.status = 'expired';
-      await invitation.save();
-    }
-    return { valid: false, message: 'This invitation has expired' };
-  }
-
-  if (!invitation.roomId) {
-    return { valid: false, message: 'The associated room no longer exists' };
-  }
-
-  // Safe preview: do NOT expose financial details, members list, or phone numbers
+  // Safe preview: no money, member list or phone numbers.
   return {
     valid: true,
     roomId: invitation.roomId._id,
     roomName: invitation.roomId.name,
+    roomType: invitation.roomId.type || 'room',
     roomDescription: invitation.roomId.description || '',
     currency: invitation.roomId.currency || 'INR',
-    inviterName: invitation.invitedBy?.name || 'A roommate',
+    inviterName: invitation.invitedBy?.name || 'A friend',
+    memberCount,
     expiresAt: invitation.expiresAt,
   };
 }
 
 export async function acceptInvitation(userId, rawToken) {
-  const tokenHash = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
-  const invitation = await RoomInvitation.findOne({ tokenHash, status: 'pending' });
+  const invitation = await findInvitation(rawToken);
+  const problem = invitationProblem(invitation);
+  if (problem) throw new AppError(problem, 400);
 
-  if (!invitation) throw new AppError('Invalid or already-used invitation', 400);
-  if (invitation.expiresAt < new Date()) {
-    invitation.status = 'expired';
-    await invitation.save();
-    throw new AppError('Invitation has expired', 400);
-  }
+  const room = await Room.findById(invitation.roomId).select('status');
+  if (!room || room.status === 'archived') throw new AppError('This group no longer exists', 404);
 
   const existing = await RoomMember.findOne({ roomId: invitation.roomId, userId });
   if (existing && existing.status === 'active') {
-    throw new AppError('You are already an active member of this room', 409);
+    // Already in: just take them to the group instead of showing an error.
+    return invitation.roomId;
   }
 
   if (existing) {
@@ -347,219 +449,402 @@ export async function acceptInvitation(userId, rawToken) {
     });
   }
 
-  invitation.status = 'accepted';
-  await invitation.save();
+  // Reusable link: count the use, keep it open for the next friend.
+  await RoomInvitation.updateOne(
+    { _id: invitation._id },
+    { $inc: { useCount: 1 }, $set: { lastUsedAt: new Date() } },
+  );
 
   return invitation.roomId;
 }
 
-export async function getRoomExpenses(roomId, { month, status, page = 1, limit = 50 } = {}) {
-  const filter = { roomId, type: 'shared' };
-  if (status) {
-    filter.status = status;
-  } else {
-    // Default to active non-cancelled expenses
-    filter.status = { $ne: 'cancelled' };
-  }
+// ─── Expenses, balances & month-end settle-up ────────────────────────────────
 
-  if (month) {
-    const [year, m] = month.split('-').map(Number);
-    filter.expenseDate = {
-      $gte: new Date(year, m - 1, 1),
-      $lt: new Date(year, m, 1),
-    };
+const PARTICIPANT_USER_FIELDS = 'name mobile avatar';
+
+/** Settlements belonging to a month: tagged with it, or untagged and paid during it. */
+export function settlementMonthFilter(month) {
+  const { start, end } = monthRange(month);
+  return {
+    $or: [
+      { forMonth: month },
+      { forMonth: null, settledAt: { $gte: start, $lt: end } },
+    ],
+  };
+}
+
+/** Attach each expense's split (who owes what + approval state). */
+export async function attachParticipants(expenses) {
+  if (!expenses.length) return expenses;
+  const rows = await ExpenseParticipant.find({ expenseId: { $in: expenses.map((e) => e._id) } })
+    .populate('userId', PARTICIPANT_USER_FIELDS)
+    .lean();
+  const byExpense = new Map();
+  for (const r of rows) {
+    const key = r.expenseId.toString();
+    if (!byExpense.has(key)) byExpense.set(key, []);
+    byExpense.get(key).push({
+      userId: r.userId?._id?.toString() || null,
+      name: r.userId?.name || 'Former member',
+      owedPaise: r.owedAmountInSmallestUnit,
+      reviewStatus: r.reviewStatus,
+      reviewNote: r.reviewNote || '',
+      reviewedAt: r.reviewedAt || null,
+    });
   }
-  const skip = (page - 1) * limit;
-  return Expense.find(filter)
+  return expenses.map((e) => ({ ...e, participants: byExpense.get(e._id.toString()) || [] }));
+}
+
+export async function getRoomExpenses(roomId, { month, status, page = 1, limit = 100 } = {}) {
+  const filter = { roomId, type: 'shared' };
+  const statuses = String(status || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  filter.status = statuses.length ? { $in: statuses } : { $ne: 'cancelled' };
+  if (month) {
+    const { start, end } = monthRange(month);
+    filter.expenseDate = { $gte: start, $lt: end };
+  }
+  const safeLimit = Math.min(200, Math.max(1, Number(limit) || 100));
+  const skip = (Math.max(1, Number(page) || 1) - 1) * safeLimit;
+  const expenses = await Expense.find(filter)
     .populate('paidBy', 'name mobile')
     .populate('createdBy', 'name')
-    .sort({ expenseDate: -1 })
+    .populate('rejectedBy', 'name')
+    .sort({ expenseDate: -1, createdAt: -1 })
     .skip(skip)
-    .limit(limit)
+    .limit(safeLimit)
     .lean();
+  return attachParticipants(expenses);
+}
+
+/**
+ * Net balance of every member (all-time, or for one month when `month` is given).
+ * Only approved expenses and confirmed settlements are counted.
+ * Returns an array (for backward compatibility) with `.summary` and `.month` attached.
+ */
+const memberUserId = (m) => String(m.userId?._id || m.userId);
+
+function livedThere(member, range) {
+  const from = member.membershipStartDate || member.joinedAt || member.createdAt;
+  const to = member.membershipEndDate || member.leftAt;
+  return (!from || new Date(from) < range.end) && (!to || new Date(to) >= range.start);
+}
+
+/**
+ * Flat rule: each month's approved total is divided EQUALLY among everyone who
+ * lived in the room that month — no matter who was in which expense or when they
+ * joined. Returns participant-style rows { userId, owedAmountInSmallestUnit }.
+ */
+export async function roomEqualShareRows(roomId, countedExpenses, roomMembers) {
+  if (!countedExpenses.length) return [];
+  const room = await Room.findById(roomId).select('createdAt cycleAnchor').lean();
+  const closed = await RoomCycle.find({ roomId }).select('index start end').lean();
+  const ranges = new Map(closed.map((c) => [c.index, { start: c.start, end: c.end }]));
+  const last = closed.reduce((a, c) => (!a || c.index > a.index ? c : a), null);
+  const openStart = last ? last.end : firstCycleStart(room?.cycleAnchor || room?.createdAt || new Date());
+  ranges.set(last ? last.index + 1 : 1, { start: openStart, end: OPEN_END });
+
+  const totals = new Map();
+  for (const e of countedExpenses) {
+    const key = e.cycle || 0;
+    totals.set(key, (totals.get(key) || 0) + e.amountInSmallestUnit);
+  }
+
+  const everyone = roomMembers.filter((m) => m.userId);
+  const rows = [];
+  for (const [cycle, total] of totals) {
+    const range = ranges.get(cycle);
+    let people = (range ? everyone.filter((m) => livedThere(m, range)) : everyone).map(memberUserId);
+    if (!people.length) people = everyone.map(memberUserId);
+    people = [...new Set(people)].sort();
+    if (!people.length) continue;
+    const base = Math.floor(total / people.length);
+    let extra = total - base * people.length; // leftover paise, one each
+    for (const userId of people) {
+      rows.push({ userId, owedAmountInSmallestUnit: base + (extra > 0 ? 1 : 0) });
+      extra -= 1;
+    }
+  }
+  return rows;
 }
 
 export async function getRoomBalances(roomId, options = {}) {
-  const { month } = options;
-  let dateFilter = null;
-  if (month && /^\d{4}-\d{2}$/.test(month)) {
-    const [year, m] = month.split('-').map(Number);
-    const start = new Date(Date.UTC(year, m - 1, 1, 0, 0, 0));
-    const end = new Date(Date.UTC(year, m, 1, 0, 0, 0));
-    dateFilter = { $gte: start, $lt: end };
-  }
+  const month = isValidMonth(options.month) ? options.month : null;
 
-  // Fetch all members (both active and inactive to avoid dropping former members with balances)
   const allMembers = await RoomMember.find({ roomId }).populate('userId', 'name mobile avatar');
-  const net = new Map();
+  const memberInfo = allMembers
+    .filter((m) => m.userId)
+    .map((m) => ({
+      userId: m.userId._id.toString(),
+      name: m.userId.name,
+      mobile: m.userId.mobile,
+      avatar: m.userId.avatar || '',
+      role: m.role,
+      status: m.status,
+      isCurrentMember: m.status === 'active',
+    }));
 
-  for (const member of allMembers) {
-    if (!member.userId) continue;
-    const id = member.userId._id.toString();
-    net.set(id, {
-      userId: id,
-      name: member.userId.name,
-      mobile: member.userId.mobile,
-      avatar: member.userId.avatar || '',
-      role: member.role,
-      status: member.status,
-      isCurrentMember: member.status === 'active',
-      totalPaidPaise: 0,
-      totalExpensePaidPaise: 0,
-      totalShareOwedPaise: 0,
-      settlementsPaidPaise: 0,
-      settlementsReceivedPaise: 0,
-      netPaise: 0,
-      receivablePaise: 0,
-      payablePaise: 0,
-    });
-  }
-
-  // Query expenses
-  const expenseQuery = { roomId, type: 'shared', status: { $ne: 'cancelled' } };
-  if (dateFilter) {
-    expenseQuery.expenseDate = dateFilter;
-  }
-  const expenses = await Expense.find(expenseQuery).lean();
-
-  let totalSharedExpensePaise = 0;
-  let disputedExpenseCount = 0;
-  for (const exp of expenses) {
-    totalSharedExpensePaise += exp.amountInSmallestUnit;
-    if (exp.status === 'disputed') disputedExpenseCount++;
-  }
-
-  const expenseIds = expenses.map((e) => e._id);
-  const participants = expenseIds.length
-    ? await ExpenseParticipant.find({ expenseId: { $in: expenseIds } }).lean()
-    : [];
-
-  const byExpense = new Map();
-  for (const p of participants) {
-    const key = p.expenseId.toString();
-    if (!byExpense.has(key)) byExpense.set(key, []);
-    byExpense.get(key).push(p);
-  }
-
-  function ensureUser(id, fallbackName) {
-    if (!net.has(id)) {
-      net.set(id, {
-        userId: id,
-        name: fallbackName || 'Former Member',
-        mobile: null,
-        avatar: '',
-        role: 'member',
-        status: 'left',
-        isCurrentMember: false,
-        totalPaidPaise: 0,
-        totalExpensePaidPaise: 0,
-        totalShareOwedPaise: 0,
-        settlementsPaidPaise: 0,
-        settlementsReceivedPaise: 0,
-        netPaise: 0,
-        receivablePaise: 0,
-        payablePaise: 0,
-      });
-    }
-  }
-
-  for (const expense of expenses) {
-    const payerId = expense.paidBy.toString();
-    const shares = byExpense.get(expense._id.toString()) || [];
-    ensureUser(payerId);
-
-    // Member directly paid for this expense
-    net.get(payerId).totalExpensePaidPaise += expense.amountInSmallestUnit;
-
-    for (const share of shares) {
-      const debtorId = share.userId.toString();
-      const amount = share.owedAmountInSmallestUnit;
-      ensureUser(debtorId);
-
-      net.get(debtorId).totalShareOwedPaise += amount;
-    }
-  }
-
-  // Settlements query
+  const expenseQuery = { roomId, type: 'shared', status: { $in: COUNTED_EXPENSE_STATUSES } };
   const settlementQuery = { roomId };
-  if (dateFilter) {
-    settlementQuery.settledAt = dateFilter;
-  }
-  const allSettlements = await Settlement.find(settlementQuery).lean();
-
-  let totalSettledPaise = 0;
-  let pendingSettlementsCount = 0;
-  let completedSettlementsCount = 0;
-
-  for (const s of allSettlements) {
-    const status = s.status || 'completed';
-    if (status === 'pending') {
-      pendingSettlementsCount++;
-      continue;
-    }
-    if (status === 'reversed' || status === 'rejected') {
-      continue;
-    }
-
-    // Completed settlement
-    completedSettlementsCount++;
-    totalSettledPaise += s.amountInSmallestUnit;
-
-    const fromId = s.paidBy.toString();
-    const toId = s.paidTo.toString();
-    ensureUser(fromId);
-    ensureUser(toId);
-
-    net.get(fromId).settlementsPaidPaise += s.amountInSmallestUnit;
-    net.get(toId).settlementsReceivedPaise += s.amountInSmallestUnit;
+  if (month) {
+    const { start, end } = monthRange(month);
+    expenseQuery.expenseDate = { $gte: start, $lt: end };
+    Object.assign(settlementQuery, settlementMonthFilter(month));
   }
 
-  // Calculate Net Balances per member
+  const [expenses, allSettlements, pendingApprovalCount] = await Promise.all([
+    Expense.find(expenseQuery).lean(),
+    Settlement.find(settlementQuery).lean(),
+    Expense.countDocuments({ roomId, type: 'shared', status: 'pending_review' }),
+  ]);
+  const roomDoc = await Room.findById(roomId).select('type').lean();
+  const isFlat = (roomDoc?.type || 'room') === 'room';
+  // Flats: monthly equal divide. Trips/groups: each expense's own split.
+  const participants = isFlat
+    ? await roomEqualShareRows(roomId, expenses, allMembers)
+    : expenses.length
+      ? await ExpenseParticipant.find({ expenseId: { $in: expenses.map((e) => e._id) } }).lean()
+      : [];
+
+  const completed = allSettlements.filter((s) => (s.status || 'completed') === 'completed');
+  const ledger = buildLedger({ members: memberInfo, expenses, participants, settlements: completed });
+
   let totalOutstandingDuePaise = 0;
-  for (const member of net.values()) {
-    // Net balance = (total amount paid) - (total amount owed)
-    // where total amount paid = expenses paid + settlements paid
-    // and total amount owed = expense shares + settlements received
-    member.netPaise =
-      (member.totalExpensePaidPaise + member.settlementsPaidPaise) -
-      (member.totalShareOwedPaise + member.settlementsReceivedPaise);
+  const memberList = Array.from(ledger.values()).map((line) => {
+    const out = {
+      role: 'member',
+      status: 'left',
+      isCurrentMember: false,
+      mobile: null,
+      avatar: '',
+      ...line,
+      totalExpensePaidPaise: line.paidPaise,
+      totalShareOwedPaise: line.sharePaise,
+      receivablePaise: Math.max(0, line.netPaise),
+      payablePaise: Math.max(0, -line.netPaise),
+      // kept for older clients
+      totalPaidPaise: line.paidPaise + line.settlementsPaidPaise - line.settlementsReceivedPaise,
+    };
+    totalOutstandingDuePaise += out.receivablePaise;
+    return out;
+  });
 
-    member.receivablePaise = Math.max(0, member.netPaise);
-    member.payablePaise = Math.max(0, -member.netPaise);
-
-    // Keep totalPaidPaise for backward compatibility:
-    member.totalPaidPaise =
-      member.totalExpensePaidPaise +
-      member.settlementsPaidPaise -
-      member.settlementsReceivedPaise;
-
-    if (member.receivablePaise > 0) {
-      totalOutstandingDuePaise += member.receivablePaise;
-    }
-  }
-
-  const memberList = Array.from(net.values()).sort((a, b) => {
-    // Current members first, then highest positive balance
+  memberList.sort((a, b) => {
     if (a.isCurrentMember !== b.isCurrentMember) return a.isCurrentMember ? -1 : 1;
     return b.netPaise - a.netPaise;
   });
 
-  const activeMembersCount = memberList.filter((m) => m.isCurrentMember).length;
-
-  const summary = {
-    totalSharedExpensePaise,
-    totalSharedExpenseCount: expenses.length,
-    totalSettledPaise,
-    pendingSettlementsCount,
-    completedSettlementsCount,
-    disputedExpenseCount,
-    totalOutstandingDuePaise,
-    activeMembersCount,
-  };
-
   memberList.balances = memberList;
-  memberList.summary = summary;
-  memberList.month = month || null;
-
+  memberList.summary = {
+    totalSharedExpensePaise: expenses.reduce((s, e) => s + e.amountInSmallestUnit, 0),
+    totalSharedExpenseCount: expenses.length,
+    totalSettledPaise: completed.reduce((s, x) => s + x.amountInSmallestUnit, 0),
+    pendingSettlementsCount: allSettlements.filter((s) => s.status === 'pending').length,
+    completedSettlementsCount: completed.length,
+    disputedExpenseCount: expenses.filter((e) => e.status === 'disputed').length,
+    pendingApprovalCount,
+    totalOutstandingDuePaise,
+    activeMembersCount: memberList.filter((m) => m.isCurrentMember).length,
+  };
+  memberList.month = month;
   return memberList;
+}
+
+/**
+ * Month-end settle-up: who spent how much, everyone's fair share, and the
+ * fewest payments that make everyone even for that month.
+ */
+/** Calendar month ('YYYY-MM') or whole history ('all'). */
+export async function getMonthlyReport(roomId, month) {
+  if (month === 'all') {
+    return buildPeriodReport(roomId, {
+      key: 'all',
+      label: null, // filled from room type
+      range: null,
+      expenseMatch: {},
+      settlementMatch: {},
+    });
+  }
+  const { start, end } = monthRange(month);
+  return buildPeriodReport(roomId, {
+    key: month,
+    label: monthLabel(month),
+    range: { start, end },
+    expenseMatch: { expenseDate: { $gte: start, $lt: end } },
+    settlementMatch: settlementMonthFilter(month),
+  });
+}
+
+/**
+ * Settle-up report for any period.
+ * scope = { key, label, range: {start,end}|null, expenseMatch, settlementMatch, cycle? }
+ */
+export async function buildPeriodReport(roomId, scope) {
+  const range = scope.range;
+  const allTime = !range;
+
+  const [room, roomMembers, monthExpenses, monthSettlements] = await Promise.all([
+    Room.findById(roomId).select('name type currency settings').lean(),
+    RoomMember.find({ roomId }).populate('userId', 'name mobile avatar').lean(),
+    Expense.find({
+      roomId,
+      type: 'shared',
+      status: { $ne: 'cancelled' },
+      ...scope.expenseMatch,
+    })
+      .populate('paidBy', 'name')
+      .populate('rejectedBy', 'name')
+      .sort({ expenseDate: 1, createdAt: 1 })
+      .lean(),
+    Settlement.find({ roomId, ...scope.settlementMatch })
+      .populate('paidBy', 'name')
+      .populate('paidTo', 'name')
+      .sort({ settledAt: 1 })
+      .lean(),
+  ]);
+  if (!room) throw new AppError('Room not found', 404);
+
+  // Members who lived in the room during this month.
+  const monthMembers = roomMembers
+    .filter((m) => m.userId)
+    .filter((m) => {
+      const from = m.membershipStartDate || m.joinedAt || m.createdAt;
+      const to = m.membershipEndDate || m.leftAt;
+      if (allTime) return true;
+      return (!from || new Date(from) < range.end) && (!to || new Date(to) >= range.start);
+    })
+    .map((m) => ({
+      userId: m.userId._id.toString(),
+      name: m.userId.name,
+      avatar: m.userId.avatar || '',
+      isCurrentMember: m.status === 'active',
+    }));
+
+  const counted = monthExpenses.filter((e) => COUNTED_EXPENSE_STATUSES.includes(e.status));
+  const pending = monthExpenses.filter((e) => e.status === 'pending_review');
+  const rejected = monthExpenses.filter((e) => e.status === 'rejected');
+
+  const expensesWithSplit = await attachParticipants(monthExpenses);
+  const countedIds = new Set(counted.map((e) => e._id.toString()));
+  const isFlat = (room.type || 'room') === 'room';
+  // Flats: the month's total ÷ everyone who lived there. Trips/groups: per-expense split.
+  const countedParticipants = isFlat
+    ? await roomEqualShareRows(roomId, counted, roomMembers)
+    : expensesWithSplit
+        .filter((e) => countedIds.has(e._id.toString()))
+        .flatMap((e) => e.participants.filter((p) => p.userId).map((p) => ({
+          userId: p.userId,
+          owedAmountInSmallestUnit: p.owedPaise,
+        })));
+  const countedForLedger = counted.map((e) => ({ ...e, paidBy: e.paidBy?._id || e.paidBy }));
+
+  const completedSettlements = monthSettlements.filter((s) => (s.status || 'completed') === 'completed');
+  const ledgerSettlements = completedSettlements.map((s) => ({
+    paidBy: s.paidBy?._id || s.paidBy,
+    paidTo: s.paidTo?._id || s.paidTo,
+    amountInSmallestUnit: s.amountInSmallestUnit,
+  }));
+
+  // Before settlements: what each person spent vs. their fair share.
+  const spendLedger = buildLedger({
+    members: monthMembers,
+    expenses: countedForLedger,
+    participants: countedParticipants,
+  });
+  // After confirmed settlements: what is still left to pay.
+  const finalLedger = buildLedger({
+    members: monthMembers,
+    expenses: countedForLedger,
+    participants: countedParticipants,
+    settlements: ledgerSettlements,
+  });
+
+  const members = Array.from(finalLedger.values())
+    .map((line) => ({
+      userId: line.userId,
+      name: line.name,
+      avatar: line.avatar || '',
+      isCurrentMember: Boolean(line.isCurrentMember),
+      paidPaise: line.paidPaise,
+      sharePaise: line.sharePaise,
+      // + spent more than their share, - spent less
+      differencePaise: spendLedger.get(line.userId)?.netPaise || 0,
+      settlementsPaidPaise: line.settlementsPaidPaise,
+      settlementsReceivedPaise: line.settlementsReceivedPaise,
+      // + still to receive, - still to pay
+      remainingPaise: line.netPaise,
+    }))
+    .sort((a, b) => b.paidPaise - a.paidPaise || a.name.localeCompare(b.name));
+
+  const totalPaise = counted.reduce((s, e) => s + e.amountInSmallestUnit, 0);
+  const headCount = monthMembers.length || members.length || 1;
+
+  const categoryMap = {};
+  for (const e of counted) {
+    const cat = e.category || 'general';
+    categoryMap[cat] = (categoryMap[cat] || 0) + e.amountInSmallestUnit;
+  }
+  const categories = Object.entries(categoryMap)
+    .map(([category, amountPaise]) => ({
+      category,
+      amountPaise,
+      percentage: totalPaise ? Math.round((amountPaise / totalPaise) * 100) : 0,
+    }))
+    .sort((a, b) => b.amountPaise - a.amountPaise);
+
+  const transfers = planSettlements(members.map((m) => ({ ...m, netPaise: m.remainingPaise })));
+
+  return {
+    roomId,
+    roomName: room.name,
+    roomType: room.type || 'room',
+    month: scope.key,
+    monthLabel: scope.label || (room.type === 'trip' ? 'Whole trip' : 'All time'),
+    cycle: scope.cycle || null,
+    periodStart: range?.start || null,
+    periodEnd: range?.end || null,
+    generatedAt: new Date(),
+    totals: {
+      approvedPaise: totalPaise,
+      approvedCount: counted.length,
+      pendingPaise: pending.reduce((s, e) => s + e.amountInSmallestUnit, 0),
+      pendingCount: pending.length,
+      rejectedCount: rejected.length,
+      settledPaise: completedSettlements.reduce((s, x) => s + x.amountInSmallestUnit, 0),
+    },
+    headCount,
+    equalSharePaise: Math.round(totalPaise / headCount),
+    members,
+    transfers,
+    isSettled: counted.length > 0 && transfers.length === 0,
+    categories,
+    expenses: expensesWithSplit.map((e) => ({
+      _id: e._id,
+      title: e.title,
+      category: e.category,
+      expenseDate: e.expenseDate,
+      amountPaise: e.amountInSmallestUnit,
+      status: e.status,
+      paidById: (e.paidBy?._id || e.paidBy)?.toString(),
+      paidByName: e.paidBy?.name || 'Former member',
+      createdById: e.createdBy?.toString() || null,
+      carriedOver: Boolean(e.carriedOver),
+      rejectionReason: e.rejectionReason || '',
+      participants: e.participants,
+    })),
+    settlements: monthSettlements.map((s) => ({
+      _id: s._id,
+      fromId: (s.paidBy?._id || s.paidBy)?.toString(),
+      fromName: s.paidBy?.name || 'Former member',
+      toId: (s.paidTo?._id || s.paidTo)?.toString(),
+      toName: s.paidTo?.name || 'Former member',
+      amountPaise: s.amountInSmallestUnit,
+      paymentMethod: s.paymentMethod,
+      status: s.status || 'completed',
+      settledAt: s.settledAt,
+      note: s.note || '',
+    })),
+  };
 }

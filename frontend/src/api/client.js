@@ -1,8 +1,9 @@
+// VITE_API_URL:
+//   empty  → API is on the same server as the app (AWS: Nginx sends /api to Node)
+//   a URL  → API lives elsewhere (e.g. http://localhost:4000 in development)
+const RAW_API_URL = import.meta.env.VITE_API_URL;
 const API_URL = (
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD
-    ? 'https://fairshare-6011.onrender.com'
-    : 'http://localhost:4000')
+  RAW_API_URL !== undefined ? RAW_API_URL : import.meta.env.PROD ? '' : 'http://localhost:4000'
 ).replace(/\/+$/, '');
 
 function buildApiUrl(path) {

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { formatINR } from '../utils/money';
 import { openRazorpaySubscriptionCheckout } from '../utils/razorpay';
+import { GROUP_TYPES, typeMeta } from './room/roomUtils';
 import {
   HiOutlinePlus,
   HiOutlineX,
@@ -22,6 +23,7 @@ import {
   HiOutlineDocumentText,
   HiOutlineExternalLink,
   HiOutlineCheckCircle,
+  HiOutlineChevronRight,
 } from 'react-icons/hi';
 import { SiWhatsapp, SiRazorpay } from 'react-icons/si';
 import { MdOutlinePayment } from 'react-icons/md';
@@ -40,21 +42,14 @@ export default function Rooms() {
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [inviteModalRoom, setInviteModalRoom] = useState(null);
-  const [inviteToken, setInviteToken] = useState('');
-  const [generatingInvite, setGeneratingInvite] = useState(false);
-  const [copiedField, setCopiedField] = useState(null);
-
-  // Fast Join
-  const [joinInput, setJoinInput] = useState('');
-  const [joining, setJoining] = useState(false);
 
   // Payment state
   const [payingWithRazorpay, setPayingWithRazorpay] = useState(false);
   const [paymentStep, setPaymentStep] = useState('idle'); // 'idle' | 'processing' | 'success'
 
   // Create Room Form
-  const [form, setForm] = useState({ name: '', description: '', address: '', monthlyRent: '' });
+  const EMPTY_FORM = { type: 'room', name: '', description: '', address: '', monthlyRent: '', startDate: '', endDate: '', requireApproval: true };
+  const [form, setForm] = useState(EMPTY_FORM);
 
   async function load() {
     try {
@@ -136,25 +131,25 @@ function handleCreateClick() {
     setBusy(true);
     try {
       const payload = {
+        type: form.type,
         name: form.name.trim(),
         description: form.description.trim(),
         address: form.address.trim(),
+        settings: { requireApproval: form.requireApproval },
       };
-      if (form.monthlyRent && Number(form.monthlyRent) > 0) {
+      if (form.type === 'room' && form.monthlyRent && Number(form.monthlyRent) > 0) {
         payload.monthlyRent = Number(form.monthlyRent);
+      }
+      if (form.type === 'trip') {
+        if (form.startDate) payload.startDate = form.startDate;
+        if (form.endDate) payload.endDate = form.endDate;
       }
       const res = await api('/api/rooms', { method: 'POST', body: JSON.stringify(payload) });
       setShowCreateModal(false);
-      setForm({ name: '', description: '', address: '', monthlyRent: '' });
-      await load();
-
-      const createdRoom = res.room;
-      const token = res.inviteToken || createdRoom?.inviteToken;
-      if (createdRoom && token) {
-        openInviteModal({ ...createdRoom, inviteToken: token });
-      } else if (createdRoom?._id) {
-        navigate(`/rooms/${createdRoom._id}`);
-      }
+      setForm(EMPTY_FORM);
+      toast.success(`${form.name.trim()} created — now invite your friends`);
+      // Open the new group with the invite sheet ready to share in WhatsApp
+      if (res.room?._id) navigate(`/rooms/${res.room._id}?invite=1`);
     } catch (err) {
       toast.error(err.message || 'Failed to create room');
     } finally {
@@ -162,70 +157,8 @@ function handleCreateClick() {
     }
   }
 
-  function extractToken(str) {
-    if (!str) return '';
-    const trimmed = str.trim();
-    if (trimmed.includes('token=')) {
-      try {
-        const url = new URL(trimmed.startsWith('http') ? trimmed : `http://x.com/${trimmed}`);
-        return url.searchParams.get('token') || trimmed;
-      } catch {
-        const m = trimmed.match(/token=([a-zA-Z0-9_-]+)/);
-        return m ? m[1] : trimmed;
-      }
-    }
-    return trimmed;
-  }
-
-  async function handleFastJoin(e) {
-    e.preventDefault();
-    const token = extractToken(joinInput);
-    if (!token) { toast.error('Please enter a valid invite code or link'); return; }
-    setJoining(true);
-    try {
-      const res = await api('/api/rooms/join', { method: 'POST', body: JSON.stringify({ token }) });
-      toast.success('Joined room successfully!');
-      setJoinInput('');
-      navigate(`/rooms/${res.roomId}`);
-    } catch (err) {
-      toast.error(err.message || 'Failed to join room. Check the invite link.');
-    } finally {
-      setJoining(false);
-    }
-  }
-
-  async function openInviteModal(room) {
-    setInviteModalRoom(room);
-    setGeneratingInvite(true);
-    setInviteToken('');
-    try {
-      if (room.inviteToken) {
-        setInviteToken(room.inviteToken);
-      } else {
-        const res = await api(`/api/rooms/${room._id}/invitations`, {
-          method: 'POST',
-          body: JSON.stringify({ expiresInDays: 30 }),
-        });
-        setInviteToken(res.token);
-      }
-    } catch (err) {
-      toast.error(err.message || 'Failed to generate invite link');
-    } finally {
-      setGeneratingInvite(false);
-    }
-  }
-
-  function copyToClipboard(text, field, msg) {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    toast.success(msg || 'Copied!');
-    setTimeout(() => setCopiedField((p) => (p === field ? null : p)), 2200);
-  }
-
   const myOwnedRooms = rooms.filter((r) => r.myRole === 'owner');
   const otherRooms = rooms.filter((r) => r.myRole !== 'owner');
-  const inviteUrl = inviteToken ? `${window.location.origin}/join?token=${inviteToken}` : '';
 
   const isFirstTime = !roomSubscription?.amountPaid || roomSubscription.amountPaid === 0;
   const priceDisplay = isFirstTime ? '₹1' : '₹50';
@@ -234,14 +167,14 @@ function handleCreateClick() {
     : null;
 
   return (
-    <>
+    <div className="d-page">
       {/* ── Page Header ─────────────────────────────────── */}
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.65rem', fontWeight: 800 }}>{t('roomsTitle')}</h1>
-          <p className="muted subtitle" style={{ marginTop: 4 }}>{t('roomsSubtitle')}</p>
+          <h1>{t('roomsTitle')}</h1>
+          <p className="muted subtitle">{t('roomsSubtitle')}</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="page-header-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {!isSubscribed && (
             <button className="btn-ghost" onClick={() => setShowPaymentModal(true)} style={{ gap: 6 }}>
               <RiShieldCheckLine size={16} />
@@ -292,91 +225,31 @@ function handleCreateClick() {
         </div>
       )}
 
-      {/* ── Join Room Card ───────────────────────────────── */}
-      <section className="app-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 220px' }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--brand-soft)', display: 'grid', placeItems: 'center', color: 'var(--brand)', flexShrink: 0 }}>
-            <HiOutlineKey size={22} />
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '1rem' }}>Join a Room</div>
-            <div className="muted text-xs" style={{ marginTop: 2 }}>Paste an invite link or code</div>
-          </div>
-        </div>
-        <form className="fast-join-form" onSubmit={handleFastJoin} style={{ display: 'flex', gap: 8, flex: '1 1 300px', maxWidth: 480 }}>
-          <input
-            id="fast-join-input"
-            style={{ flex: 1, minWidth: 0, minHeight: 44, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'var(--bg-2)', fontSize: '0.92rem', color: 'var(--ink)' }}
-            value={joinInput}
-            onChange={(e) => setJoinInput(e.target.value)}
-            placeholder="Paste invite link or code..."
-            aria-label="Invite link or code"
-          />
-          <button type="submit" className="btn-primary" disabled={joining || !joinInput.trim()} style={{ flexShrink: 0, minHeight: 44, padding: '0 20px' }}>
-            {joining ? 'Joining…' : t('joinBtn')}
-          </button>
-        </form>
-        <Link to="/join" style={{ color: 'var(--brand)', fontWeight: 600, fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-          Full page →
-        </Link>
-      </section>
-
-      {/* ── Room List ────────────────────────────────────── */}
+      {/* ── Groups list ───────────────────────────────────── */}
       {loading ? (
-        <div className="app-card muted" style={{ padding: 48, textAlign: 'center' }}>
-          <span className="spinner" style={{ margin: '0 auto 12px' }} />
-          <div>Loading rooms...</div>
+        <div className="gx-list">
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
         </div>
       ) : rooms.length === 0 ? (
-        <div className="app-card" style={{ padding: '48px 24px', textAlign: 'center', maxWidth: 560, margin: '0 auto' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand)', display: 'grid', placeItems: 'center', margin: '0 auto 20px' }}>
-            <HiOutlineUserGroup size={30} />
+        <div className="d-empty">
+          <div className="d-empty-ico">
+            <HiOutlineUserGroup size={28} />
           </div>
-          <h3 style={{ marginBottom: 8, fontSize: '1.3rem' }}>{t('noRoomsTitle')}</h3>
-          <p className="muted text-sm" style={{ maxWidth: 400, margin: '0 auto 28px', lineHeight: 1.65 }}>{t('noRoomsDesc')}</p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button type="button" className="btn-primary" onClick={handleCreateClick} style={{ gap: 6 }}>
-              <HiOutlinePlus size={16} />
-              {t('createFirstRoomBtn')}
-            </button>
-            <Link className="btn-ghost" to="/join" style={{ gap: 6 }}>
-              <HiOutlineKey size={16} />
-              Join via link
-            </Link>
-          </div>
+          <h3>No groups yet</h3>
+          <p className="muted">Create one for your flat, a trip or any group of friends — then share the link with everyone.</p>
+          <button type="button" className="btn-primary" onClick={handleCreateClick}>
+            <HiOutlinePlus size={16} /> Create a group
+          </button>
+          <p className="muted text-xs" style={{ margin: '14px 0 0' }}>
+            Got an invite? Open <Link to="/join">Join</Link> from the menu.
+          </p>
         </div>
       ) : (
-        <div className="stack" style={{ gap: 28 }}>
-          {myOwnedRooms.length > 0 && (
-            <section className="stack" style={{ gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>{t('myRoomsLabel') || 'Rooms you manage'}</h2>
-                <span className="badge" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', fontWeight: 700 }}>
-                  {myOwnedRooms.length} {myOwnedRooms.length === 1 ? 'room' : 'rooms'}
-                </span>
-              </div>
-              <div className="room-card-grid">
-                {myOwnedRooms.map((room) => (
-                  <RoomCard key={room._id} room={room} role="owner" onInvite={() => openInviteModal(room)} />
-                ))}
-              </div>
-            </section>
-          )}
-          {otherRooms.length > 0 && (
-            <section className="stack" style={{ gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>{t('joinedRoomsLabel') || 'Rooms you joined'}</h2>
-                <span className="badge" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', fontWeight: 700 }}>
-                  {otherRooms.length} {otherRooms.length === 1 ? 'room' : 'rooms'}
-                </span>
-              </div>
-              <div className="room-card-grid">
-                {otherRooms.map((room) => (
-                  <RoomCard key={room._id} room={room} role="member" onInvite={() => openInviteModal(room)} />
-                ))}
-              </div>
-            </section>
-          )}
+        <div className="gx-list">
+          {[...myOwnedRooms, ...otherRooms].map((room) => (
+            <GroupRow key={room._id} room={room} />
+          ))}
         </div>
       )}
 
@@ -385,12 +258,14 @@ function handleCreateClick() {
       ════════════════════════════════════ */}
       {showPaymentModal && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', padding: 16 }}
+          className="modal-overlay"
           onClick={() => !payingWithRazorpay && setShowPaymentModal(false)}
         >
           <div
+            className="modal-sheet"
             onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 440, background: 'var(--card)', borderRadius: 24, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--line)', overflow: 'hidden', maxHeight: '95vh', overflowY: 'auto' }}
+            role="dialog"
+            aria-modal="true"
           >
             {paymentStep === 'success' ? (
               /* Success State */
@@ -504,289 +379,142 @@ function handleCreateClick() {
           STEP 2: CREATE ROOM MODAL
       ════════════════════════════════════ */}
       {showCreateModal && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', padding: 16 }}
-          onClick={() => !busy && setShowCreateModal(false)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 460, background: 'var(--card)', borderRadius: 24, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--line)', overflow: 'hidden', maxHeight: '95vh', overflowY: 'auto' }}
-          >
-            {/* Header */}
-            <div style={{ padding: '22px 24px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--success)', marginBottom: 4 }}>
-                  Step 2 of 2 — Create Room
-                </div>
-                <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800 }}>Create Your Room</h2>
-                <p className="muted text-xs" style={{ margin: '4px 0 0' }}>Set up your flat, PG, or hostel room</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => !busy && setShowCreateModal(false)}
-                disabled={busy}
-                aria-label="Close create room dialog"
-                style={{ background: 'var(--bg-3)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'grid', placeItems: 'center', cursor: 'pointer', flexShrink: 0, color: 'var(--ink)' }}
-              >
+        <div className="modal-overlay" onClick={() => !busy && setShowCreateModal(false)}>
+          <div className="modal-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-group-title">
+            <div className="d-sheet-grip" />
+            <div className="d-sheet-head">
+              <h2 id="create-group-title">Create a group</h2>
+              <button type="button" className="modal-close-button" onClick={() => !busy && setShowCreateModal(false)} disabled={busy} aria-label="Close">
                 <HiOutlineX size={16} />
               </button>
             </div>
+            <p className="muted d-sheet-note">Add everyone with one link, add expenses, and the app tells you who pays whom.</p>
 
-            {/* Form */}
-            <form onSubmit={onSubmitRoom} style={{ padding: '20px 24px 24px' }}>
-              <div className="stack" style={{ gap: 16 }}>
-                {/* Room Name */}
-                <div>
-                  <label htmlFor="create-room-name" style={{ fontWeight: 600, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-                    <HiOutlineHome size={14} style={{ color: 'var(--brand)' }} />
-                    Room / Flat Name *
-                  </label>
-                  <input
-                    id="create-room-name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                    autoFocus
-                    placeholder="e.g. Sharma Flat, 3BHK Koramangala"
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'var(--bg-2)', fontSize: '0.95rem', color: 'var(--ink)', outline: 'none' }}
-                  />
-                </div>
+            <form onSubmit={onSubmitRoom} className="d-form">
+              <div className="rx-type-grid" role="radiogroup" aria-label="Group type">
+                {GROUP_TYPES.map((gt) => (
+                  <button
+                    key={gt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.type === gt.id}
+                    className={`rx-type ${form.type === gt.id ? 'on' : ''}`}
+                    onClick={() => setForm({ ...form, type: gt.id })}
+                  >
+                    <span className="rx-type-emoji">{gt.emoji}</span>
+                    <strong>{gt.label}</strong>
+                    <small>{gt.hint}</small>
+                  </button>
+                ))}
+              </div>
 
-                {/* Address */}
+              <div>
+                <label htmlFor="create-room-name">Name *</label>
+                <input
+                  id="create-room-name"
+                  className="d-input"
+                  value={form.name}
+                  maxLength={50}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                  autoFocus
+                  placeholder={form.type === 'trip' ? 'e.g. Goa Trip 2026' : form.type === 'group' ? 'e.g. Office lunch gang' : 'e.g. Flat 302, Koramangala'}
+                />
+              </div>
+
+              {form.type !== 'group' && (
                 <div>
-                  <label htmlFor="create-room-address" style={{ fontWeight: 600, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-                    <HiOutlineLocationMarker size={14} style={{ color: 'var(--brand)' }} />
-                    Address <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
-                  </label>
+                  <label htmlFor="create-room-address">{form.type === 'trip' ? 'Destination' : 'Address'} (optional)</label>
                   <input
                     id="create-room-address"
+                    className="d-input"
                     value={form.address}
+                    maxLength={200}
                     onChange={(e) => setForm({ ...form, address: e.target.value })}
-                    placeholder="e.g. 12, MG Road, Bangalore"
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'var(--bg-2)', fontSize: '0.95rem', color: 'var(--ink)', outline: 'none' }}
+                    placeholder={form.type === 'trip' ? 'e.g. North Goa' : 'e.g. 12, MG Road, Bengaluru'}
                   />
                 </div>
+              )}
 
-                {/* Monthly Rent */}
+              {form.type === 'room' && (
                 <div>
-                  <label htmlFor="create-room-rent" style={{ fontWeight: 600, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-                    <HiOutlineCurrencyRupee size={14} style={{ color: 'var(--brand)' }} />
-                    Monthly Rent (₹) <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
-                  </label>
+                  <label htmlFor="create-room-rent">Monthly rent ₹ (optional)</label>
                   <input
                     id="create-room-rent"
+                    className="d-input"
                     type="number"
                     min="0"
+                    inputMode="numeric"
                     value={form.monthlyRent}
                     onChange={(e) => setForm({ ...form, monthlyRent: e.target.value })}
-                    placeholder="e.g. 8000"
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'var(--bg-2)', fontSize: '0.95rem', color: 'var(--ink)', outline: 'none' }}
+                    placeholder="e.g. 24000"
                   />
                 </div>
+              )}
 
-                {/* Description */}
-                <div>
-                  <label htmlFor="create-room-desc" style={{ fontWeight: 600, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-                    <HiOutlineDocumentText size={14} style={{ color: 'var(--brand)' }} />
-                    Description <span className="muted" style={{ fontWeight: 400 }}>(optional)</span>
-                  </label>
-                  <textarea
-                    id="create-room-desc"
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    placeholder="Short note about this room..."
-                    rows={3}
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'var(--bg-2)', fontSize: '0.95rem', color: 'var(--ink)', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
-                  />
+              {form.type === 'trip' && (
+                <div className="rx-form-row rx-form-row-2">
+                  <div>
+                    <label htmlFor="create-trip-start">From (optional)</label>
+                    <input id="create-trip-start" className="d-input" type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+                  </div>
+                  <div>
+                    <label htmlFor="create-trip-end">To (optional)</label>
+                    <input id="create-trip-end" className="d-input" type="date" min={form.startDate || undefined} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                  </div>
                 </div>
+              )}
 
-                {/* Buttons */}
-                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                  <button
-                    id="confirm-create-room-btn"
-                    type="submit"
-                    className="btn-primary"
-                    disabled={busy || !form.name.trim()}
-                    style={{ flex: 1, justifyContent: 'center', gap: 6 }}
-                  >
-                    {busy ? (<><span className="spinner" /> Creating…</>) : (<><HiOutlinePlus size={16} /> {t('createRoomBtn')}</>)}
-                  </button>
-                  <button type="button" className="btn-ghost" onClick={() => setShowCreateModal(false)} disabled={busy}>
-                    Cancel
-                  </button>
-                </div>
+              <label className="rx-check">
+                <input type="checkbox" checked={form.requireApproval} onChange={(e) => setForm({ ...form, requireApproval: e.target.checked })} />
+                <span>
+                  <strong>Friends approve each expense</strong>
+                  <small className="muted">An expense counts only after everyone in it says OK. You can change this later.</small>
+                </span>
+              </label>
+
+              <div className="d-form-actions">
+                <button type="button" className="btn-ghost" onClick={() => setShowCreateModal(false)} disabled={busy}>
+                  Cancel
+                </button>
+                <button id="confirm-create-room-btn" type="submit" className="btn-primary" disabled={busy || !form.name.trim()} style={{ flex: 1, justifyContent: 'center' }}>
+                  {busy ? (<><span className="spinner" /> Creating…</>) : (<><HiOutlinePlus size={16} /> Create {typeMeta(form.type).noun}</>)}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ── Invite Roommates Modal ───────────────────────── */}
-      {inviteModalRoom && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 9997, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', padding: 16 }}
-          onClick={() => setInviteModalRoom(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 480, background: 'var(--card)', borderRadius: 24, boxShadow: 'var(--shadow-lg)', border: '1px solid var(--line)', overflow: 'hidden', maxHeight: '95vh', overflowY: 'auto' }}
-          >
-            <div style={{ padding: '22px 24px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>{t('inviteModalTitle')}</h2>
-                <p className="muted text-xs" style={{ margin: '4px 0 0' }}>{inviteModalRoom.name}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInviteModalRoom(null)}
-                aria-label="Close"
-                style={{ background: 'var(--bg-3)', border: 'none', borderRadius: 10, width: 32, height: 32, display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--ink)' }}
-              >
-                <HiOutlineX size={16} />
-              </button>
-            </div>
-            <div style={{ padding: '20px 24px 24px' }}>
-              {generatingInvite ? (
-                <div style={{ textAlign: 'center', padding: 32 }}>
-                  <span className="spinner" />
-                  <p className="muted text-xs" style={{ marginTop: 10 }}>Generating secure invite code…</p>
-                </div>
-              ) : (
-                <div className="stack" style={{ gap: 16 }}>
-                  {/* Invite Code */}
-                  <div style={{ background: 'var(--brand-soft)', border: '1.5px dashed var(--brand)', borderRadius: 14, padding: '16px 18px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--brand)' }}>
-                        {t('inviteCodeLabel')}
-                      </span>
-                      <span className="text-xs muted">Click to copy</span>
-                    </div>
-                    <div
-                      onClick={() => copyToClipboard(inviteToken, 'code', 'Invite code copied!')}
-                      title="Click to copy"
-                      style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', cursor: 'pointer', textAlign: 'center', wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', fontSize: '1rem', fontWeight: 700, color: 'var(--ink)', letterSpacing: '0.04em' }}
-                    >
-                      {inviteToken || 'Generating…'}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() => copyToClipboard(inviteToken, 'code', 'Invite code copied!')}
-                        style={{ gap: 6, fontWeight: 700, background: copiedField === 'code' ? '#10b981' : undefined }}
-                      >
-                        {copiedField === 'code' ? <><HiCheck size={14} /> Copied!</> : <><HiDuplicate size={14} /> Copy Code</>}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Invite Link */}
-                  <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 14, padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 8 }}>Shareable Link</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        readOnly
-                        value={inviteUrl}
-                        style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--line)', background: 'var(--bg-2)', fontSize: '0.8rem', color: 'var(--muted)', cursor: 'pointer', minWidth: 0 }}
-                      />
-                      <button
-                        type="button"
-                        className="btn-ghost"
-                        onClick={() => copyToClipboard(inviteUrl, 'link', 'Link copied!')}
-                        style={{ flexShrink: 0, gap: 6, background: copiedField === 'link' ? '#10b981' : undefined, color: copiedField === 'link' ? '#fff' : undefined }}
-                      >
-                        {copiedField === 'link' ? <><HiCheck size={14} /> Copied!</> : <><HiDuplicate size={14} /> Copy</>}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* WhatsApp */}
-                  <button
-                    type="button"
-                    className="btn-whatsapp"
-                    onClick={() => {
-                      const text = encodeURIComponent(`Bhai, "${inviteModalRoom.name}" flat ka expense track karne ke liye FairShare room join kar le:\n\nJoin Link: ${inviteUrl}\nInvite Code: ${inviteToken}`);
-                      window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-                    }}
-                    style={{ gap: 8 }}
-                  >
-                    <SiWhatsapp size={18} />
-                    Share on WhatsApp
-                  </button>
-
-                  {/* Footer Actions */}
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      style={{ flex: 1, justifyContent: 'center', gap: 6 }}
-                      onClick={() => { const id = inviteModalRoom._id; setInviteModalRoom(null); if (id) navigate(`/rooms/${id}`); }}
-                    >
-                      <HiOutlineExternalLink size={16} />
-                      {t('goToDashboardBtn')}
-                    </button>
-                    <button type="button" className="btn-ghost" onClick={() => setInviteModalRoom(null)} style={{ gap: 6 }}>
-                      <HiOutlineX size={16} />
-                      Close
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }
 
-/* ── Room Card Component ─────────────────────────────────────── */
-function RoomCard({ room, role, onInvite }) {
+/* ── Group row ───────────────────────────────────────────────── */
+function GroupRow({ room }) {
+  const meta = typeMeta(room.type);
+  const pending = room.myPendingApprovals || 0;
   return (
-    <article
-      style={{ background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 18, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'space-between', minHeight: 170, transition: 'box-shadow 0.18s, transform 0.18s' }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = 'var(--shadow)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
-    >
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, lineHeight: 1.3 }}>{room.name}</h3>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, flexShrink: 0, padding: '3px 9px', borderRadius: 20, background: role === 'owner' ? 'var(--brand-soft)' : 'var(--bg-3)', color: role === 'owner' ? 'var(--brand)' : 'var(--muted)' }}>
-            {role === 'owner' ? 'Owner' : 'Member'}
-          </span>
-        </div>
-        {room.address && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-            <HiOutlineLocationMarker size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-            <p className="muted text-xs" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{room.address}</p>
-          </div>
-        )}
-        {room.monthlyRent > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <HiOutlineCurrencyRupee size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-            <p className="text-xs" style={{ margin: 0, fontWeight: 600 }}>
-              <span className="muted" style={{ fontWeight: 400 }}>Rent: </span>
-              {formatINR(room.monthlyRent)}
-            </p>
-          </div>
-        )}
-        {room.memberCount > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
-            <HiOutlineUserGroup size={13} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-            <p className="text-xs muted" style={{ margin: 0 }}>{room.memberCount} {room.memberCount === 1 ? 'member' : 'members'}</p>
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
-        <Link className="btn-primary" to={`/rooms/${room._id}`} style={{ flex: 1, justifyContent: 'center', gap: 6, fontSize: '0.88rem' }}>
-          <HiOutlineExternalLink size={14} />
-          Open Room
-        </Link>
-        <button type="button" className="btn-ghost" onClick={onInvite} style={{ flex: 1, justifyContent: 'center', gap: 6, fontSize: '0.88rem' }}>
-          <HiOutlineUserAdd size={14} />
-          Invite
-        </button>
-      </div>
-    </article>
+    <Link to={`/rooms/${room._id}`} className="gx-row">
+      <span className={`gx-ico ${room.type || 'room'}`} aria-hidden="true">
+        {meta.emoji}
+      </span>
+      <span className="gx-main">
+        <strong className="gx-name">{room.name}</strong>
+        <span className="gx-meta">
+          {meta.label}
+          {' · '}
+          {room.memberCount} {room.memberCount === 1 ? 'person' : 'people'}
+          {room.myRole === 'owner' ? ' · You created it' : ''}
+          {room.isClosed ? ' · Finished' : ''}
+        </span>
+      </span>
+      {pending > 0 && (
+        <span className="gx-pending" title={`${pending} waiting for your approval`}>
+          {pending}
+        </span>
+      )}
+      <HiOutlineChevronRight size={18} className="gx-chev" />
+    </Link>
   );
 }

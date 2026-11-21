@@ -16,15 +16,17 @@ const expenseParticipantSchema = new mongoose.Schema(
     splitValue: { type: Number, default: null }, // % or shares, for reference/editing
     reviewStatus: {
       type: String,
-      enum: ["pending", "accepted", "disputed"],
+      enum: ["pending", "accepted", "rejected", "disputed"],
       default: "pending",
     },
+    reviewedAt: { type: Date, default: null },
+    reviewNote: { type: String, default: "" },
   },
   { timestamps: true },
 );
 
 expenseParticipantSchema.index({ expenseId: 1 });
-expenseParticipantSchema.index({ userId: 1 });
+expenseParticipantSchema.index({ userId: 1, reviewStatus: 1 });
 
 export const ExpenseParticipant = mongoose.model(
   "ExpenseParticipant",

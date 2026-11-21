@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import GoogleLoginButton from '../components/GoogleLoginButton';
+import { useLanguage } from '../context/LanguageContext';
 import {
   HiOutlineEye,
   HiOutlineEyeOff,
@@ -13,6 +14,7 @@ import {
 
 // ─── Coming Soon Mobile Login ────────────────────────────────────────────────
 function MobileLoginComingSoon() {
+  const { t } = useLanguage();
   return (
     <div
       className="stack"
@@ -37,12 +39,11 @@ function MobileLoginComingSoon() {
       </div>
 
       <h2 style={{ margin: 0, fontSize: '1.15rem', color: 'var(--ink)' }}>
-        Coming Soon
+        {t('Coming Soon')}
       </h2>
 
       <p className="muted text-sm" style={{ margin: '6px 0 0', lineHeight: 1.6 }}>
-        Mobile OTP login is temporarily unavailable. Please use Google or Email
-        to sign in.
+        {t('Mobile OTP login is temporarily unavailable. Please use Google or Email to sign in.')}
       </p>
     </div>
   );
@@ -51,6 +52,7 @@ function MobileLoginComingSoon() {
 // ─── Email Login ─────────────────────────────────────────────────────────────
 function EmailLogin({ redirectUrl }) {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -68,12 +70,12 @@ function EmailLogin({ redirectUrl }) {
     try {
       await login(form);
 
-      toast.success('Welcome back! 👋');
+      toast.success(t('Welcome back! 👋'));
       sessionStorage.removeItem('pending_redirect');
 
       navigate(redirectUrl || '/');
     } catch (err) {
-      toast.error(err.message || 'Login failed');
+      toast.error(err.message || t('Login failed'));
     } finally {
       setBusy(false);
     }
@@ -82,7 +84,7 @@ function EmailLogin({ redirectUrl }) {
   return (
     <form className="stack" onSubmit={onSubmit} id="email-login-form">
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="email-input">Email address</label>
+        <label htmlFor="email-input">{t('Email address')}</label>
 
         <div style={{ position: 'relative' }}>
           <span
@@ -115,7 +117,7 @@ function EmailLogin({ redirectUrl }) {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="password-input">Password</label>
+        <label htmlFor="password-input">{t('Password')}</label>
 
         <div style={{ position: 'relative' }}>
           <input
@@ -148,7 +150,7 @@ function EmailLogin({ redirectUrl }) {
               display: 'flex',
               alignItems: 'center',
             }}
-            aria-label={showPwd ? 'Hide password' : 'Show password'}
+            aria-label={showPwd ? t('Hide password') : t('Show password')}
           >
             {showPwd ? (
               <HiOutlineEyeOff size={18} />
@@ -168,15 +170,15 @@ function EmailLogin({ redirectUrl }) {
       >
         {busy ? (
           <>
-            <span className="spinner" /> Signing in…
+            <span className="spinner" /> {t('Signing in…')}
           </>
         ) : (
-          'Sign in'
+          t('Sign in')
         )}
       </button>
 
       <p className="text-sm muted" style={{ textAlign: 'center' }}>
-        Don't have an account?{' '}
+        {t("Don't have an account?")}{' '}
         <Link
           to={`/register${
             redirectUrl
@@ -185,7 +187,7 @@ function EmailLogin({ redirectUrl }) {
           }`}
           style={{ color: 'var(--brand)', fontWeight: 600 }}
         >
-          Create one
+          {t('Create one')}
         </Link>
       </p>
     </form>
@@ -195,9 +197,10 @@ function EmailLogin({ redirectUrl }) {
 // ─── Main Login Page ─────────────────────────────────────────────────────────
 export default function Login() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [params] = useSearchParams();
 
-  const [tab, setTab] = useState('mobile');
+  const [tab, setTab] = useState('email');
 
   const redirectParam = params.get('redirect');
 
@@ -226,8 +229,9 @@ export default function Login() {
             F
           </div>
 
-          <span style={{ color: 'var(--ink)' }}>
-            FairShare
+          <span className="brand-copy" style={{ color: 'var(--ink)' }}>
+            <strong>FairShare</strong>
+            <small style={{ color: 'var(--muted)' }}>{t('Split bills, stay even')}</small>
           </span>
         </div>
 
@@ -238,35 +242,25 @@ export default function Login() {
             fontSize: '1.4rem',
           }}
         >
-          Welcome back 👋
+          {t('Welcome back 👋')}
         </h1>
 
         <p
           className="muted text-sm"
           style={{ textAlign: 'center', marginBottom: 20 }}
         >
-          Sign in to track expenses and split bills
+          {t('Sign in to track expenses and split bills')}
         </p>
 
         {/* Google Login */}
         <GoogleLoginButton redirectUrl={redirectUrl} />
 
         <div className="divider" style={{ margin: '18px 0' }}>
-          or continue with
+          {t('or continue with')}
         </div>
 
         {/* Login Tabs */}
         <div className="auth-tabs" style={{ marginBottom: 20 }}>
-          <button
-            id="tab-mobile"
-            className={`auth-tab ${tab === 'mobile' ? 'active' : ''}`}
-            onClick={() => setTab('mobile')}
-            type="button"
-          >
-            <HiOutlineDeviceMobile size={16} />
-            Mobile OTP
-          </button>
-
           <button
             id="tab-email"
             className={`auth-tab ${tab === 'email' ? 'active' : ''}`}
@@ -274,15 +268,24 @@ export default function Login() {
             type="button"
           >
             <HiOutlineMail size={16} />
-            Email
+            {t('Email')}
+          </button>
+
+          <button
+            id="tab-mobile"
+            className={`auth-tab ${tab === 'mobile' ? 'active' : ''}`}
+            onClick={() => setTab('mobile')}
+            type="button"
+          >
+            <HiOutlineDeviceMobile size={16} />
+            {t('Mobile OTP')}
           </button>
         </div>
 
-        {/* Login Content */}
-        {tab === 'mobile' ? (
-          <MobileLoginComingSoon />
-        ) : (
+        {tab === 'email' ? (
           <EmailLogin redirectUrl={redirectUrl} />
+        ) : (
+          <MobileLoginComingSoon />
         )}
 
       </div>

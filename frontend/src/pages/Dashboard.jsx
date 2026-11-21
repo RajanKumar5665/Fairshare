@@ -1,19 +1,21 @@
-
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { CATEGORIES, formatDate, formatINR } from '../utils/money';
+import { usePendingApprovals } from '../hooks/usePendingApprovals';
+import { exportPersonalCsv, exportPersonalPdf } from '../utils/exportReport';
+import PhotoPicker from '../components/PhotoPicker';
 import {
   HiOutlinePlus,
   HiOutlineTrash,
   HiOutlineX,
   HiOutlineSave,
-  HiOutlineCalendar,
-  HiOutlineCurrencyRupee,
-  HiOutlineCollection,
-  HiOutlineClock,
+  HiOutlineBell,
+  HiOutlineTable,
+  HiOutlineDocumentDownload,
 } from 'react-icons/hi';
 
 const CAT_EMOJI = {
@@ -37,6 +39,7 @@ function getGreeting(hour) {
 export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [expenses, setExpenses] = useState([]);
   const [form, setForm] = useState({ title: '', amountRupees: '', category: 'food', receiptUrl: '' });
@@ -46,8 +49,11 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [exporting, setExporting] = useState(null);
+  const navigate = useNavigate();
+  const { approvals } = usePendingApprovals({ enabled: Boolean(user) });
 
-  const displayName = user?.name || 'User';
+  const displayName = user?.name || t('User');
   const firstName = displayName.split(' ')[0];
   const greeting = getGreeting(currentTime.getHours());
 
@@ -56,7 +62,7 @@ export default function Dashboard() {
       const data = await api('/api/expenses/personal');
       setExpenses(data.expenses || []);
     } catch (err) {
-      toast.error(err.message || 'Failed to load expenses');
+      toast.error(err.message || t('Failed to load expenses'));
     } finally {
       setLoading(false);
     }
@@ -65,6 +71,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (!authLoading && user) load();
   }, [user, authLoading]);
+
+  useEffect(() => {
+    if (searchParams.get('action') === 'add') {
+      setShowAddModal(true);
+      searchParams.delete('action');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 60000);
@@ -88,20 +102,34 @@ export default function Dashboard() {
 
   const totals = useMemo(() => {
     const spent = visible.reduce((sum, e) => sum + (e.amountInSmallestUnit || 0), 0);
-    const thisMonth = visible
-      .filter((e) => {
-        const d = new Date(e.expenseDate);
-        const now = new Date();
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      })
-      .reduce((sum, e) => sum + (e.amountInSmallestUnit || 0), 0);
-    return { spent, thisMonth, count: visible.length };
+    const now = new Date();
+    const monthItems = visible.filter((e) => {
+      const d = new Date(e.expenseDate);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const thisMonth = monthItems.reduce((sum, e) => sum + (e.amountInSmallestUnit || 0), 0);
+    return { spent, thisMonth, monthCount: monthItems.length, count: visible.length };
   }, [visible]);
+
+  async function doExport(kind) {
+    if (!filtered.length) return toast.error(t('Nothing to export yet'));
+    const label = `my_expenses${filter ? `_${filter}` : ''}`;
+    setExporting(kind);
+    try {
+      if (kind === 'pdf') await exportPersonalPdf(filtered, { name: t("{name}'s expenses", { name: displayName }), label });
+      else await exportPersonalCsv(filtered, label);
+      toast.success(t('{kind} downloaded', { kind: kind.toUpperCase() }));
+    } catch (err) {
+      toast.error(err.message || t('Export failed'));
+    } finally {
+      setExporting(null);
+    }
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
     if (!form.amountRupees || Number(form.amountRupees) <= 0) {
-      toast.error('Please enter a valid amount');
+      toast.error(t('Please enter a valid amount'));
       return;
     }
     setSubmitting(true);
@@ -116,12 +144,12 @@ export default function Dashboard() {
           type: 'personal',
         }),
       });
-      toast.success('Expense recorded successfully! 🎉');
+      toast.success(t('Expense recorded successfully! 🎉'));
       setForm({ title: '', amountRupees: '', category: 'food', receiptUrl: '' });
       setShowAddModal(false);
       await load();
     } catch (err) {
-      toast.error(err.message || 'Failed to save expense');
+      toast.error(err.message || t('Failed to save expense'));
     } finally {
       setSubmitting(false);
     }
@@ -132,104 +160,146 @@ export default function Dashboard() {
     setDeletingId(id);
     try {
       await api(`/api/expenses/${id}`, { method: 'DELETE' });
-      toast.success('Expense deleted');
+      toast.success(t('Expense deleted'));
       setExpenses((prev) => prev.filter((e) => e._id !== id));
     } catch (err) {
-      toast.error(err.message || 'Failed to delete expense');
+      toast.error(err.message || t('Failed to delete expense'));
     } finally {
       setDeletingId(null);
     }
   }
 
+  const sheetNote = t('This stays in your personal ledger and will not be split with any room.');
+
   if (authLoading || !user) {
     return (
-      <div className="d-hero">
-        <div className="d-hero-top">
-          <div className="d-brand">
-            <img className="d-logo" src="/screenshot-wide.png" alt="" />
-            <div>
-              <div className="d-brand-name">FairShare</div>
-              <div className="d-brand-sub">Loading…</div>
-            </div>
+      <div className="d-page">
+        <section className="d-hero">
+          <div className="d-hero-copy">
+            <p className="d-greet">{t('Loading…')}</p>
+            <h1 className="d-name">FairShare</h1>
           </div>
-          <div className="d-avatar">F</div>
-        </div>
-        <p className="d-greet">{greeting},</p>
-        <h1 className="d-name">{firstName} 👋</h1>
-        <div className="d-balance">
-          <span className="d-balance-label">Loading</span>
-          <span className="d-balance-amt">—</span>
-        </div>
+          <div className="d-balance">
+            <span className="d-balance-label">{t('This month')}</span>
+            <span className="d-balance-amt">—</span>
+          </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen" style={{ minHeight: '100dvh', paddingBottom: 80 }}>
-      {/* HERO */}
-      <section className="d-hero">
-        <div className="d-hero-top">
-          <div className="d-brand">
-            <img className="d-logo" src="/screenshot-wide.png" alt="" />
-            <div>
-              <div className="d-brand-name">FairShare</div>
-              <div className="d-brand-sub">{formattedToday}</div>
-            </div>
+    <div className="d-page">
+      <section className="d-hero dx-hero">
+        <div className="dx-hero-top">
+          <div className="dx-hello">
+            <span className="dx-date">{formattedToday}</span>
+            <h1>
+              {t(greeting)}, {firstName}
+            </h1>
           </div>
-          <div className="d-avatar" title={displayName}>
-            {displayName.charAt(0).toUpperCase()}
-          </div>
+          <Link to="/profile" className="dx-avatar" title={displayName} aria-label={t('Open profile')}>
+            {displayName
+              .split(' ')
+              .filter(Boolean)
+              .map((w) => w[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase()}
+          </Link>
         </div>
-
-        <p className="d-greet">{greeting},</p>
-        <h1 className="d-name">{displayName} 👋</h1>
-
-        <div className="d-balance">
-          <span className="d-balance-label">Spent in {currentTime.toLocaleString('en-IN', { month: 'long' })}</span>
-          <span className="d-balance-amt">{formatINR(totals.thisMonth)}</span>
+        <div className="dx-amount">
+          <span>{t('Spent in {month}', { month: currentTime.toLocaleString('en-IN', { month: 'long' }) })}</span>
+          <strong>{formatINR(totals.thisMonth)}</strong>
+          <small>
+            {totals.monthCount === 1
+              ? t('{n} expense this month', { n: totals.monthCount })
+              : t('{n} expenses this month', { n: totals.monthCount })}
+          </small>
         </div>
       </section>
 
-      {/* STATS */}
-      <div className="d-stats">
+      <div className="d-stats rx-stats">
         <div className="d-stat">
-          <span className="d-stat-ico"><HiOutlineCurrencyRupee size={20} /></span>
+          <div className="d-stat-lbl">{t('All time')}</div>
           <div className="d-stat-val">{formatINR(totals.spent)}</div>
-          <div className="d-stat-lbl">{t('allTimeLabel')}</div>
         </div>
         <div className="d-stat">
-          <span className="d-stat-ico"><HiOutlineCollection size={20} /></span>
+          <div className="d-stat-lbl">{t('Entries')}</div>
           <div className="d-stat-val">{totals.count}</div>
-          <div className="d-stat-lbl">{t('totalEntriesLabel')}</div>
         </div>
         <div className="d-stat">
-          <span className="d-stat-ico"><HiOutlineCalendar size={20} /></span>
-          <div className="d-stat-val">{formatINR(totals.thisMonth)}</div>
-          <div className="d-stat-lbl">This month</div>
-        </div>
-        <div className="d-stat">
-          <span className="d-stat-ico"><HiOutlinePlus size={20} /></span>
-          <div className="d-stat-val">{formatINR(totals.count > 0 ? Math.round(totals.thisMonth / totals.count) : 0)}</div>
-          <div className="d-stat-lbl">Per entry</div>
+          <div className="d-stat-lbl">{t('Avg this month')}</div>
+          <div className="d-stat-val">{formatINR(totals.monthCount > 0 ? Math.round(totals.thisMonth / totals.monthCount) : 0)}</div>
         </div>
       </div>
 
-      {/* TITLE + ADD */}
+      {approvals.length > 0 && (
+        <section className="rx-dash-approvals" aria-label={t('Room expenses waiting for your approval')}>
+          <button
+            type="button"
+            className="rx-alert"
+            onClick={() => navigate(`/rooms/${approvals[0].roomId}?tab=approvals`)}
+          >
+            <span className="rx-alert-ico"><HiOutlineBell size={18} /></span>
+            <span className="rx-alert-text">
+              <strong>
+                {approvals.length === 1
+                  ? t('{n} room expense needs your approval', { n: approvals.length })
+                  : t('{n} room expenses need your approval', { n: approvals.length })}
+              </strong>
+              <small>{t('Your roommates are waiting — it won’t count until you approve.')}</small>
+            </span>
+            <span className="rx-alert-cta">{t('Review')}</span>
+          </button>
+          {approvals.slice(0, 3).map((a) => (
+            <Link key={a.expenseId} to={`/rooms/${a.roomId}?tab=approvals`} className="rx-dash-item">
+              <div className="d-row-main">
+                <div className="d-row-title">{a.title}</div>
+                <div className="d-row-meta">
+                  <span>{a.roomName}</span>
+                  <span className="d-dot" />
+                  <span>{t('{name} paid {amount}', { name: a.paidByName, amount: formatINR(a.amountPaise) })}</span>
+                </div>
+              </div>
+              <div className="d-row-right">
+                <div style={{ textAlign: 'right' }}>
+                  <div className="d-row-amt">{formatINR(a.mySharePaise)}</div>
+                  <div className="muted text-xs">{t('your share')}</div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </section>
+      )}
+
       <div className="d-section-head">
         <div>
           <h2>{t('dashboardTitle')}</h2>
           <p className="muted">{t('dashboardSubtitle')}</p>
         </div>
-        <button id="add-expense-fab" className="d-add-desktop" onClick={() => setShowAddModal(true)}>
-          <HiOutlinePlus size={18} />
-          {t('addPersonalExpenseBtn')}
-        </button>
+        <div className="d-export">
+          {filtered.length > 0 && (
+            <>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => doExport('csv')} disabled={!!exporting} aria-label={t('Export CSV')}>
+                {exporting === 'csv' ? <span className="spinner" /> : <HiOutlineTable size={15} />} CSV
+              </button>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => doExport('pdf')} disabled={!!exporting} aria-label={t('Export PDF')}>
+                {exporting === 'pdf' ? <span className="spinner" /> : <HiOutlineDocumentDownload size={15} />} PDF
+              </button>
+            </>
+          )}
+          <button id="add-expense-fab" className="btn-primary d-add-desktop" onClick={() => setShowAddModal(true)}>
+            <HiOutlinePlus size={18} />
+            {t('addPersonalExpenseBtn')}
+          </button>
+        </div>
       </div>
 
       {/* FILTER CHIPS */}
       <div className="d-chips">
         <button type="button" className={`d-chip ${filter === '' ? 'active' : ''}`} onClick={() => setFilter('')}>
-          All ({visible.length})
+          {t('All')} ({visible.length})
         </button>
         {CATEGORIES.map((c) => {
           const count = visible.filter((e) => e.category === c).length;
@@ -241,7 +311,7 @@ export default function Dashboard() {
               className={`d-chip ${filter === c ? 'active' : ''}`}
               onClick={() => setFilter(filter === c ? '' : c)}
             >
-              {CAT_EMOJI[c] || '📦'} {c} ({count})
+              {CAT_EMOJI[c] || '📦'} {t(c)} ({count})
             </button>
           );
         })}
@@ -249,9 +319,10 @@ export default function Dashboard() {
 
       {/* LIST */}
       {loading ? (
-        <div className="d-empty">
-          <div className="d-empty-ico"><HiOutlinePlus size={28} /></div>
-          <p className="muted">Loading your expenses…</p>
+        <div className="d-list">
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
         </div>
       ) : filtered.length === 0 ? (
         <div className="d-empty">
@@ -273,7 +344,7 @@ export default function Dashboard() {
                 <div className="d-row-meta">
                   <span>{formatDate(e.expenseDate)}</span>
                   <span className="d-dot" />
-                  <span style={{ textTransform: 'capitalize' }}>{e.category}</span>
+                  <span style={{ textTransform: 'capitalize' }}>{t(e.category)}</span>
                 </div>
               </div>
               <div className="d-row-right">
@@ -282,7 +353,7 @@ export default function Dashboard() {
                   className="d-del"
                   onClick={() => cancelExpense(e._id)}
                   disabled={deletingId === e._id}
-                  aria-label="Delete expense"
+                  aria-label={t('Delete expense')}
                 >
                   {deletingId === e._id ? (
                     <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
@@ -296,23 +367,24 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* MOBILE FAB */}
-      <button className="d-fab" aria-label="Add expense" onClick={() => setShowAddModal(true)}>
-        <HiOutlinePlus size={26} />
-      </button>
+      {!showAddModal && (
+        <button className="d-fab" aria-label={t('Add expense')} onClick={() => setShowAddModal(true)}>
+          <HiOutlinePlus size={26} />
+        </button>
+      )}
 
       {/* MODAL / BOTTOM SHEET */}
       {showAddModal && (
-        <div className="d-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="d-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
             <div className="d-sheet-grip" />
             <div className="d-sheet-head">
               <h2>{t('addPersonalExpenseBtn')}</h2>
-              <button className="modal-close-button" aria-label="Close" onClick={() => setShowAddModal(false)}>
+              <button className="modal-close-button" aria-label={t('Close')} onClick={() => setShowAddModal(false)}>
                 <HiOutlineX size={16} />
               </button>
             </div>
-            <p className="muted d-sheet-note">Ye expense sirf aapka hai, kisi room ke saath share nahi hoga.</p>
+            <p className="muted d-sheet-note">{sheetNote}</p>
 
             <form onSubmit={onSubmit} className="d-form">
               <div className="d-amount-wrap">
@@ -331,17 +403,19 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label htmlFor="exp-title">Title *</label>
+                <label htmlFor="exp-title">{t('What was it for?')}</label>
                 <input
                   id="exp-title"
                   className="d-input"
+                  placeholder={t('e.g. Lunch, Petrol, Movie')}
+                  maxLength={100}
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                 />
               </div>
 
               <div>
-                <label>Category</label>
+                <label>{t('Category')}</label>
                 <div className="d-cat-grid">
                   {CATEGORIES.map((c) => (
                     <button
@@ -351,45 +425,24 @@ export default function Dashboard() {
                       onClick={() => setForm({ ...form, category: c })}
                     >
                       <span>{CAT_EMOJI[c] || '📦'}</span>
-                      <small>{c}</small>
+                      <small>{t(c)}</small>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="exp-receipt">Receipt image (optional)</label>
-                <input
-                  id="exp-receipt"
-                  className="d-input"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    if (!file.type.startsWith('image/')) {
-                      toast.error('Please select an image file only');
-                      e.target.value = '';
-                      return;
-                    }
-                    if (file.size > 1.5 * 1024 * 1024) {
-                      toast.error('Image must be 1.5 MB or smaller');
-                      e.target.value = '';
-                      return;
-                    }
-                    const reader = new FileReader();
-                    reader.onload = () => setForm((cur) => ({ ...cur, receiptUrl: reader.result }));
-                    reader.readAsDataURL(file);
-                  }}
-                />
-              </div>
+              <PhotoPicker
+                label="Receipt"
+                value={form.receiptUrl}
+                onChange={(receiptUrl) => setForm((cur) => ({ ...cur, receiptUrl }))}
+              />
 
               <div className="d-form-actions">
                 <button type="button" className="btn-ghost" onClick={() => setShowAddModal(false)}>
-                  Cancel
+                  {t('Cancel')}
                 </button>
                 <button id="save-expense-btn" className="btn-primary" type="submit" disabled={submitting} style={{ flex: 1, justifyContent: 'center' }}>
-                  {submitting ? (<><span className="spinner" /> Saving…</>) : (<><HiOutlineSave size={16} /> Save Expense</>)}
+                  {submitting ? (<><span className="spinner" /> {t('Saving…')}</>) : (<><HiOutlineSave size={16} /> {t('Save Expense')}</>)}
                 </button>
               </div>
             </form>

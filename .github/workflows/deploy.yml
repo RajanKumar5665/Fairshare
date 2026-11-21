@@ -1,0 +1,112 @@
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Never run two deploys at the same time
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test-and-build:
+    name: Test & build
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values only so the config check passes during tests (no real services are called)
+      NODE_ENV: test
+      MONGO_URI: mongodb://127.0.0.1:27017/ci
+      JWT_ACCESS_SECRET: ci-access-secret-123456
+      JWT_REFRESH_SECRET: ci-refresh-secret-123456
+      TWILIO_ACCOUNT_SID: AC00000000000000000000000000000000
+      TWILIO_AUTH_TOKEN: ci-twilio-token-000000000000
+      TWILIO_VERIFY_SERVICE_SID: VA00000000000000000000000000000000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend — install
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+
+      - name: Backend — tests
+        working-directory: backend
+        run: npm test
+
+      - name: Frontend — install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Frontend — production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package release
+        run: |
+          mkdir -p release
+          rsync -a --exclude node_modules --exclude .env --exclude tests ./backend/ release/backend/
+          cp -r frontend/dist release/frontend-dist
+          cp -r deploy release/deploy
+          tar -czf release.tgz -C release .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release.tgz
+          retention-days: 7
+
+  deploy:
+    name: Deploy to EC2
+    needs: test-and-build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      RELEASE_ID: ${{ github.sha }}
+    steps:
+      - name: Check deploy secrets
+        id: secrets
+        run: |
+          if [ -z "$EC2_HOST" ] || [ -z "$EC2_USER" ] || [ -z "$EC2_SSH_KEY" ]; then
+            echo "::notice::EC2_HOST / EC2_USER / EC2_SSH_KEY secrets are not set yet — skipping deploy (see DEPLOY.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          name: release
+
+      - name: Set up SSH
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -T 15 -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload and activate release
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          SSH="ssh -i ~/.ssh/ec2.pem -o ServerAliveInterval=30 $EC2_USER@$EC2_HOST"
+          scp -i ~/.ssh/ec2.pem release.tgz "$EC2_USER@$EC2_HOST:/tmp/fairshare-$RELEASE_ID.tgz"
+          $SSH "set -e
+            mkdir -p /var/www/fairshare/releases/$RELEASE_ID
+            tar -xzf /tmp/fairshare-$RELEASE_ID.tgz -C /var/www/fairshare/releases/$RELEASE_ID
+            rm -f /tmp/fairshare-$RELEASE_ID.tgz
+            bash /var/www/fairshare/releases/$RELEASE_ID/deploy/deploy.sh $RELEASE_ID"

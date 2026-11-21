@@ -8,6 +8,11 @@ import { flushOfflineQueue } from '../utils/offlineQueue';
 import { api } from '../api/client';
 import { useEffect } from 'react';
 import {
+  refreshPendingApprovals,
+  resetPendingApprovals,
+  usePendingApprovals,
+} from '../hooks/usePendingApprovals';
+import {
   HiOutlineHome,
   HiOutlineUserGroup,
   HiOutlineExternalLink,
@@ -24,6 +29,19 @@ export default function Layout({ children }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const online = useOnline();
+  const { count: pendingCount } = usePendingApprovals({ enabled: Boolean(user) });
+  const userId = user?._id || user?.id;
+
+  useEffect(() => {
+    resetPendingApprovals();
+    if (userId) refreshPendingApprovals({ force: true });
+  }, [userId]);
+
+  const pendingBadge = pendingCount > 0 && (
+    <span className="nav-badge" aria-label={t('{n} expenses waiting for your approval', { n: pendingCount })}>
+      {pendingCount > 9 ? '9+' : pendingCount}
+    </span>
+  );
 
   const initials = user?.name
     ? user.name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)
@@ -31,7 +49,7 @@ export default function Layout({ children }) {
 
   async function handleLogout() {
     await logout();
-    toast.success('Logged out successfully');
+    toast.success(t('Logged out successfully'));
     navigate('/login');
   }
 
@@ -40,7 +58,7 @@ export default function Layout({ children }) {
     if (online) {
       flushOfflineQueue(api).then(({ synced }) => {
         if (synced > 0) {
-          toast.success(`Synced ${synced} offline transaction${synced > 1 ? 's' : ''}! `);
+          toast.success(synced > 1 ? t('Synced {n} offline transactions!', { n: synced }) : t('Synced {n} offline transaction!', { n: synced }));
         }
       });
     }
@@ -52,7 +70,7 @@ export default function Layout({ children }) {
       {!online && (
         <div className="offline-banner" role="alert">
           <HiOutlineWifi size={16} />
-          You're offline — some features may be limited
+          {t("You're offline — some features may be limited")}
         </div>
       )}
 
@@ -63,30 +81,49 @@ export default function Layout({ children }) {
           background: 'var(--sidebar-bg)',
           color: 'var(--sidebar-ink)',
         }}
-        aria-label="Main navigation"
+        aria-label={t('Main navigation')}
       >
         <div className="brand">
-          <img className="brand-mark" src="/screenshot-wide.png" alt="" />
-          FairShare
+          <span className="brand-mark" aria-hidden="true">F</span>
+          <span className="brand-copy">
+            <strong>FairShare</strong>
+            <small>{t('Split bills, stay even')}</small>
+          </span>
         </div>
 
-        <nav className="nav-links" aria-label="Site navigation">
-          <NavLink to="/" end id="nav-dashboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineHome size={20} />
-            {t('navDashboard')}
-          </NavLink>
-          <NavLink to="/rooms" id="nav-rooms" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineUserGroup size={20} />
-            {t('navRooms')}
-          </NavLink>
-          <NavLink to="/join" id="nav-join" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineExternalLink size={20} />
-            {t('navJoin')}
-          </NavLink>
-          <NavLink to="/profile" id="nav-profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineUser size={20} />
-            {t('navProfile')}
-          </NavLink>
+        <nav className="nav-links" aria-label={t('Site navigation')}>
+          {user ? (
+            <>
+              <NavLink to="/" end id="nav-dashboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineHome size={20} />
+                {t('navDashboard')}
+              </NavLink>
+              <NavLink to="/rooms" id="nav-rooms" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineUserGroup size={20} />
+                {t('navRooms')}
+                {pendingBadge}
+              </NavLink>
+              <NavLink to="/join" id="nav-join" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineExternalLink size={20} />
+                {t('navJoin')}
+              </NavLink>
+              <NavLink to="/profile" id="nav-profile" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineUser size={20} />
+                {t('navProfile')}
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to="/join" id="nav-join" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineExternalLink size={20} />
+                {t('navJoin')}
+              </NavLink>
+              <NavLink to="/login" id="nav-login" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineUser size={20} />
+                {t('Sign in')}
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <div className="sidebar-user">
@@ -95,34 +132,34 @@ export default function Layout({ children }) {
               <div className="user-info">
                 <div className="user-avatar">{initials}</div>
                 <div style={{ minWidth: 0 }}>
-                  <div className="user-name">{user?.name || 'User'}</div>
+                  <div className="user-name">{user?.name || t('User')}</div>
                   <div className="user-sub">{user?.email || user?.mobile || ''}</div>
                 </div>
               </div>
 
-              <button id="theme-toggle-btn" className="theme-toggle" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+              <button id="theme-toggle-btn" className="theme-toggle" onClick={toggle} aria-label={theme === 'dark' ? t('Switch to light mode') : t('Switch to dark mode')}>
                 {theme === 'dark' ? <HiSun size={18} /> : <HiMoon size={18} />}
-                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                {theme === 'dark' ? t('Light mode') : t('Dark mode')}
                 <div className="toggle-pill"><div className="toggle-knob" /></div>
               </button>
 
               <button id="logout-btn" className="logout-btn" style={{ width: '100%', marginTop: 8, justifyContent: 'center', fontSize: '0.9rem' }} onClick={handleLogout}>
                 <HiOutlineLogout size={18} />
-                Log out
+                {t('Log out')}
               </button>
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <NavLink to="/login" className="relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-xl border-0 bg-[var(--brand)] px-[18px] py-[11px] text-[.95rem] font-semibold text-white transition-all hover:shadow-[0_4px_16px_var(--brand-glow)] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50" style={{ justifyContent: 'center' }}>
-                Sign In
+                {t('Sign in')}
               </NavLink>
               <button
                 id="theme-toggle-btn"
                 className="theme-toggle"
                 onClick={toggle}
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                aria-label={theme === 'dark' ? t('Switch to light mode') : t('Switch to dark mode')}
               >
-                {theme === 'dark' ? 'Light' : 'Dark'}
+                {theme === 'dark' ? t('Light') : t('Dark')}
                 <div className="toggle-pill"><div className="toggle-knob" /></div>
               </button>
             </div>
@@ -135,25 +172,45 @@ export default function Layout({ children }) {
         {children || <Outlet />}
       </main>
 
+      {!user && (
+        <button
+          type="button"
+          className="mobile-theme-chip md:hidden"
+          onClick={toggle}
+          aria-label={theme === 'dark' ? t('Switch to light mode') : t('Switch to dark mode')}
+        >
+          {theme === 'dark' ? <HiSun size={18} /> : <HiMoon size={18} />}
+        </button>
+      )}
+
       {/* ── Bottom Nav (mobile) ────────────────────────────────────── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[var(--card)]/95 shadow-[0_-4px_20px_rgba(0,0,0,.08)] backdrop-blur-lg md:hidden" aria-label="Mobile navigation">
-        <div className="bottom-nav-inner">
-          <NavLink to="/" end id="bottom-nav-dashboard" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineHome size={22} /><span>Home</span>
-          </NavLink>
-          <NavLink to="/rooms" id="bottom-nav-rooms" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineUserGroup size={22} /><span>Rooms</span>
-          </NavLink>
-          <NavLink to="/join" id="bottom-nav-join" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineExternalLink size={22} /><span>Join</span>
-          </NavLink>
-          <NavLink to="/profile" id="bottom-nav-profile" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
-            <HiOutlineUser size={22} /><span>Profile</span>
-          </NavLink>
-          <button id="bottom-theme-toggle" className="bottom-nav-item" onClick={toggle} aria-label="Toggle theme">
-            {theme === 'dark' ? <HiSun size={22} /> : <HiMoon size={22} />}
-            <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
-          </button>
+      <nav className="bottom-nav md:hidden" aria-label={t('Mobile navigation')}>
+        <div className={`bottom-nav-inner ${user ? '' : 'guest'}`}>
+          {user ? (
+            <>
+              <NavLink to="/" end id="bottom-nav-dashboard" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineHome size={22} /><span>{t('Home')}</span>
+              </NavLink>
+              <NavLink to="/rooms" id="bottom-nav-rooms" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                <span className="bottom-nav-icon"><HiOutlineUserGroup size={22} />{pendingBadge}</span><span>{t('Groups')}</span>
+              </NavLink>
+              <NavLink to="/join" id="bottom-nav-join" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineExternalLink size={22} /><span>{t('Join')}</span>
+              </NavLink>
+              <NavLink to="/profile" id="bottom-nav-profile" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineUser size={22} /><span>{t('You')}</span>
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink to="/join" id="bottom-nav-join" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineExternalLink size={22} /><span>{t('Join')}</span>
+              </NavLink>
+              <NavLink to="/login" id="bottom-nav-login" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                <HiOutlineUser size={22} /><span>{t('Sign in')}</span>
+              </NavLink>
+            </>
+          )}
         </div>
       </nav>
 

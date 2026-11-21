@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function HomeHeader({ user }) {
+  const { t } = useLanguage();
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -17,7 +19,7 @@ export default function HomeHeader({ user }) {
       ? "Good afternoon"
       : "Good evening";
 
-  const name = user?.name || "User";
+  const name = user?.name || t("User");
 
   const date = now.toLocaleDateString("en-IN", {
     weekday: "long",
@@ -33,11 +35,11 @@ export default function HomeHeader({ user }) {
         </p>
 
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-          {greeting}, {name.split(" ")[0]} 👋
+          {t(greeting)}, {name.split(" ")[0]} 👋
         </h1>
 
         <p className="text-sm text-slate-500 mt-1">
-          Ready to manage your expenses?
+          {t("Ready to manage your expenses?")}
         </p>
       </div>
 
@@ -46,7 +48,7 @@ export default function HomeHeader({ user }) {
         className="shrink-0 w-12 h-12 rounded-full bg-blue-600
                    text-white font-bold text-lg flex items-center
                    justify-center shadow-md"
-        aria-label="Open profile"
+        aria-label={t("Open profile")}
       >
         {name.charAt(0).toUpperCase()}
       </button>

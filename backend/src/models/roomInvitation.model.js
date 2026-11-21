@@ -21,12 +21,18 @@ const roomInvitationSchema = new mongoose.Schema(
       default: "pending",
     },
     revokedAt: { type: Date, default: null },
+    // Shareable group invite (like a WhatsApp group link): one short code that
+    // any number of friends can use until it expires or is reset.
+    code: { type: String, default: null },
+    maxUses: { type: Number, default: null }, // null = unlimited
+    useCount: { type: Number, default: 0 },
+    lastUsedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
 
 roomInvitationSchema.index({ tokenHash: 1 });
-roomInvitationSchema.index({ roomId: 1 });
+roomInvitationSchema.index({ roomId: 1, status: 1 });
 
 export const RoomInvitation = mongoose.model(
   "RoomInvitation",

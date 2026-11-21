@@ -1,6 +1,7 @@
 import { toast } from 'react-hot-toast';
 import { useLocation } from 'react-router-dom';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { useLanguage } from '../context/LanguageContext';
 
 function IconDownload({ size = 16 }) {
   return (
@@ -23,6 +24,7 @@ function IconX({ size = 13 }) {
 
 export default function InstallPrompt() {
   const { pathname } = useLocation();
+  const { t } = useLanguage();
   const { canInstall, showInstallHelp, isIOS, install, dismiss } = usePWAInstall();
   const hasBottomNav = !['/login', '/register', '/privacy', '/terms'].includes(pathname)
     && !pathname.startsWith('/admin');
@@ -31,21 +33,21 @@ export default function InstallPrompt() {
 
   async function handleInstall() {
     if (isIOS) {
-      toast('Tap Share ↑, then choose "Add to Home Screen".', { duration: 6500 });
+      toast(t('Tap Share ↑, then choose "Add to Home Screen".'), { duration: 6500 });
       return;
     }
     const installed = await install();
-    if (installed) toast.success('FairShare installed! 🎉');
+    if (installed) toast.success(t('FairShare installed! 🎉'));
   }
 
   return (
-    <aside className={`install-banner${hasBottomNav ? ' with-bottom-nav' : ''}`} aria-label="Install FairShare">
+    <aside className={`install-banner${hasBottomNav ? ' with-bottom-nav' : ''}`} aria-label={t('Install FairShare')}>
       <div className="install-banner-icon">
         <img src="/screenshot-wide.png" alt="FairShare" />
       </div>
       <div className="install-banner-text">
-        <strong>{isIOS ? 'Add to Home Screen' : 'Install FairShare App'}</strong>
-        <span>{isIOS ? 'Tap Share → Add to Home Screen' : 'Fast access, works offline!'}</span>
+        <strong>{isIOS ? t('Add to Home Screen') : t('Install FairShare App')}</strong>
+        <span>{isIOS ? t('Tap Share → Add to Home Screen') : t('Fast access, works offline!')}</span>
       </div>
       <button
         id="install-app-btn"
@@ -55,17 +57,17 @@ export default function InstallPrompt() {
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
       >
         <IconDownload size={15} />
-        {isIOS ? 'How' : 'Install'}
+        {isIOS ? t('How') : t('Install')}
       </button>
       <button
         className="install-close"
         type="button"
         onClick={dismiss}
-        aria-label="Dismiss install prompt"
+        aria-label={t('Dismiss install prompt')}
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
       >
         <IconX size={13} />
-        <span>Later</span>
+        <span>{t('Later')}</span>
       </button>
     </aside>
   );

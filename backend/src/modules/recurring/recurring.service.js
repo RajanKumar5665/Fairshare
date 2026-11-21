@@ -1,8 +1,7 @@
 import { RecurringBill } from '../../models/recurringBill.model.js';
-import { Expense } from '../../models/expense.model.js';
-import { ExpenseParticipant } from '../../models/expenseParticipant.model.js';
 import { RoomMember } from '../../models/roomMember.js';
-import { calculateSplit } from '../../utils/splitCalculator.js';
+import { createSharedExpense } from '../expenses/expense.service.js';
+import { monthKey } from '../../utils/month.js';
 import { rupeesToPaise } from '../../utils/money.js';
 
 class AppError extends Error {
@@ -90,7 +89,7 @@ export async function generateDueExpense(userId, roomId, billId) {
   if (!bill) throw new AppError('Recurring bill not found', 404);
 
   const now = new Date();
-  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const currentPeriod = monthKey(now);
 
   // Prevent duplicate generation for same period
   if (bill.lastGeneratedPeriod === currentPeriod) {
@@ -122,37 +121,27 @@ export async function generateDueExpense(userId, roomId, billId) {
     finalParticipants = Array.from(eligibleIds).map((id) => ({ userId: id, shareValue: 1 }));
   }
 
-  // Calculate split amounts
-  const splitInput = finalParticipants.map((p) => ({
-    userId: p.userId.toString(),
-    shares: p.shareValue || 1,
-  }));
-
-  const splitResult = calculateSplit(bill.amountInSmallestUnit, bill.splitMethod, splitInput);
-
-  // Create authoritative expense
-  const expense = await Expense.create({
-    title: `${bill.title} (${now.toLocaleString('default', { month: 'short', year: 'numeric' })})`,
-    description: `Generated from recurring schedule: ${bill.title}`,
-    amountInSmallestUnit: bill.amountInSmallestUnit,
-    type: 'shared',
-    category: bill.category,
-    paidBy: userId,
-    roomId,
-    splitMethod: bill.splitMethod,
-    expenseDate: now,
-    status: 'active',
-    createdBy: userId,
+  const label = new Date(now.getTime() + 330 * 60 * 1000).toLocaleString('en-IN', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
   });
-
-  const participantDocs = splitResult.map((p) => ({
-    expenseId: expense._id,
-    userId: p.userId,
-    owedAmountInSmallestUnit: p.owedAmountPaise,
-    splitMethod: bill.splitMethod,
-    shareValue: p.shareValue || 1,
-  }));
-  await ExpenseParticipant.insertMany(participantDocs);
+  // Goes through the same approval flow as any other shared expense.
+  const expense = await createSharedExpense({
+    roomId,
+    payerId: userId,
+    creatorId: userId,
+    title: `${bill.title} (${label})`,
+    description: `Generated from recurring schedule: ${bill.title}`,
+    amountPaise: bill.amountInSmallestUnit,
+    category: bill.category,
+    expenseDate: now,
+    splitMethod: 'shares',
+    participants: finalParticipants.map((p) => ({
+      userId: (p.userId?._id || p.userId).toString(),
+      shares: bill.splitMethod === 'shares' ? p.shareValue || 1 : 1,
+    })),
+  });
 
   // Update bill cycle
   bill.lastGeneratedPeriod = currentPeriod;

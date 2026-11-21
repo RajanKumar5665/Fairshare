@@ -7,6 +7,7 @@ import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import './tailwind.css';
 import './index.css';
+import './room-ui.css';
 import App from './App.jsx';
 
 // Remove the previous service worker's cache of authenticated expense data.
@@ -25,8 +26,8 @@ createRoot(document.getElementById('root')).render(
             position="top-right"
             gutter={10}
             containerStyle={{
-              top: 20,
-              right: 20,
+              top: 'max(12px, env(safe-area-inset-top, 0px))',
+              right: 12,
               zIndex: 99999,
             }}
             toastOptions={{
@@ -46,16 +47,16 @@ createRoot(document.getElementById('root')).render(
               },
               success: {
                 className: 'custom-toast-popup toast-success',
-                iconTheme: { primary: '#0f6e56', secondary: '#ffffff' },
+                iconTheme: { primary: '#1769E0', secondary: '#ffffff' },
               },
               error: {
                 duration: 4800,
                 className: 'custom-toast-popup toast-error',
-                iconTheme: { primary: '#b42318', secondary: '#ffffff' },
+                iconTheme: { primary: '#DC4545', secondary: '#ffffff' },
               },
               loading: {
                 className: 'custom-toast-popup toast-loading',
-                iconTheme: { primary: '#148f6e', secondary: '#ffffff' },
+                iconTheme: { primary: '#3285F5', secondary: '#ffffff' },
               },
             }}
           />

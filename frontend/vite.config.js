@@ -9,33 +9,27 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['screenshot-wide.png'],
+      includeAssets: ['screenshot-wide.png', 'pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'FairShare - Expense Tracker',
         short_name: 'FairShare',
         description: 'Track personal expenses and split bills with friends',
-        theme_color: '#0f6e56',
-        background_color: '#f4f1ea',
+        theme_color: '#1769E0',
+        background_color: '#F3F7FF',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
         start_url: '/',
         icons: [
           {
-            src: 'screenshot-wide.png',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'screenshot-wide.png',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-          },
-          {
-            src: 'screenshot-wide.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable',
           },
         ],
         shortcuts: [
@@ -44,14 +38,14 @@ export default defineConfig({
             short_name: 'Add',
             description: 'Quickly add a personal expense',
             url: '/?action=add',
-            icons: [{ src: 'screenshot-wide.png', sizes: '192x192' }],
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
           },
           {
             name: 'View Rooms',
             short_name: 'Rooms',
             description: 'Open your shared rooms',
             url: '/rooms',
-            icons: [{ src: 'screenshot-wide.png', sizes: '192x192' }],
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
           },
         ],
         categories: ['finance', 'productivity'],
@@ -59,6 +53,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // jsPDF's optional helpers (HTML/SVG rendering) are never used here; keep them out of the install.
+        globIgnores: ['**/html2canvas*.js', '**/purify.es*.js', '**/index.es-*.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

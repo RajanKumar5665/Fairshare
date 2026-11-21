@@ -4,18 +4,29 @@ import {
   recordSettlementSchema,
   confirmSettlementSchema,
   reverseSettlementSchema,
+  reviewExpenseSchema,
+  periodQuerySchema,
 } from './expense.validation.js';
 import * as expenseService from './expense.service.js';
+import { getMonthlyReport as buildMonthlyReport } from '../rooms/room.service.js';
+import { ensureCycles, getRoomCycleReport } from '../rooms/roomCycle.service.js';
+
+const badRequest = (res, error) =>
+  res.status(400).json({ success: false, message: error.details[0].message });
 
 // ─── Create Expense ───────────────────────────────────────────────────────────
 
 export async function createExpense(req, res, next) {
   try {
     const { error, value } = createExpenseSchema.validate(req.body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error) return badRequest(res, error);
 
     const expense = await expenseService.createExpense(req.userId, value);
-    res.status(201).json({ success: true, expense });
+    res.status(201).json({
+      success: true,
+      expense,
+      needsApproval: expense.status === 'pending_review',
+    });
   } catch (err) {
     next(err);
   }
@@ -25,7 +36,7 @@ export async function createExpense(req, res, next) {
 
 export async function getExpense(req, res, next) {
   try {
-    const data = await expenseService.getExpenseById(req.params.expenseId);
+    const data = await expenseService.getExpenseById(req.params.expenseId, req.userId);
     res.json({ success: true, ...data });
   } catch (err) {
     next(err);
@@ -53,6 +64,53 @@ export async function getMonthlySummary(req, res, next) {
   }
 }
 
+// ─── Approvals ────────────────────────────────────────────────────────────────
+
+export async function listMyPendingApprovals(req, res, next) {
+  try {
+    const approvals = await expenseService.getMyPendingApprovals(req.userId);
+    res.json({ success: true, approvals, count: approvals.length });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function reviewExpense(req, res, next) {
+  try {
+    const { error, value } = reviewExpenseSchema.validate(req.body);
+    if (error) return badRequest(res, error);
+
+    const expense = await expenseService.reviewExpense(
+      req.userId,
+      req.params.roomId,
+      req.params.expenseId,
+      value,
+    );
+    res.json({ success: true, expense });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── Monthly settle-up report ─────────────────────────────────────────────────
+
+export async function getMonthlyReport(req, res, next) {
+  try {
+    const { error, value } = periodQuerySchema.validate(req.query);
+    if (error) return badRequest(res, error);
+
+    let report;
+    if (value.cycle) {
+      report = await getRoomCycleReport(req.params.roomId, value.cycle);
+    } else {
+      if (value.month === 'all') await ensureCycles(req.params.roomId);
+      report = await buildMonthlyReport(req.params.roomId, value.month);
+    }
+    res.json({ success: true, report });
+  } catch (err) {
+    next(err);
+  }
+}
 
 // ─── List Room Expenses ───────────────────────────────────────────────────────
 
@@ -63,7 +121,7 @@ export async function listRoomExpenses(req, res, next) {
       month,
       status,
       page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 50,
+      limit: limit ? Number(limit) : 100,
     });
     res.json({ success: true, expenses });
   } catch (err) {
@@ -76,10 +134,10 @@ export async function listRoomExpenses(req, res, next) {
 export async function updateExpense(req, res, next) {
   try {
     const { error, value } = updateExpenseSchema.validate(req.body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error) return badRequest(res, error);
 
     const expense = await expenseService.updateExpense(req.params.expenseId, req.userId, value);
-    res.json({ success: true, expense });
+    res.json({ success: true, expense, needsApproval: expense.status === 'pending_review' });
   } catch (err) {
     next(err);
   }
@@ -128,12 +186,10 @@ export async function getSuggestedSettlements(req, res, next) {
 export async function recordSettlement(req, res, next) {
   try {
     // Accept roomId from URL params (room-scoped route) or request body
-    const body = req.params.roomId
-      ? { ...req.body, roomId: req.params.roomId }
-      : req.body;
+    const body = req.params.roomId ? { ...req.body, roomId: req.params.roomId } : req.body;
 
     const { error, value } = recordSettlementSchema.validate(body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error) return badRequest(res, error);
 
     const settlement = await expenseService.recordSettlement(req.userId, value);
     res.status(201).json({ success: true, settlement });
@@ -146,14 +202,14 @@ export async function recordSettlement(req, res, next) {
 
 export async function confirmSettlement(req, res, next) {
   try {
-    const { error, value } = confirmSettlementSchema.validate(req.body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    const { error, value } = confirmSettlementSchema.validate(req.body || {});
+    if (error) return badRequest(res, error);
 
     const settlement = await expenseService.confirmSettlement(
       req.userId,
       req.params.roomId,
       req.params.settlementId,
-      value
+      value,
     );
     res.json({ success: true, settlement });
   } catch (err) {
@@ -161,18 +217,18 @@ export async function confirmSettlement(req, res, next) {
   }
 }
 
-// ─── Reverse Settlement (Audit Correction) ───────────────────────────────────
+// ─── Reverse / Reject Settlement ──────────────────────────────────────────────
 
 export async function reverseSettlement(req, res, next) {
   try {
     const { error, value } = reverseSettlementSchema.validate(req.body);
-    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    if (error) return badRequest(res, error);
 
     const settlement = await expenseService.reverseSettlement(
       req.userId,
       req.params.roomId,
       req.params.settlementId,
-      value
+      value,
     );
     res.json({ success: true, settlement });
   } catch (err) {

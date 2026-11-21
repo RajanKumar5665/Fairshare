@@ -7,6 +7,7 @@ import {
   transferOwnershipSchema,
 } from './room.validation.js';
 import * as roomService from './room.service.js';
+import { closeCurrentCycleNow, ensureCycles, listCycles, setGroupFinished } from './roomCycle.service.js';
 import { User } from '../../models/user.model.js';
 import { env } from '../../config/env.js';
 
@@ -50,6 +51,7 @@ export async function listRooms(req, res, next) {
 
 export async function getRoom(req, res, next) {
   try {
+    await ensureCycles(req.params.roomId); // close any month that has ended
     const room = await roomService.getRoomById(req.params.roomId);
     res.json({ success: true, room, myRole: req.roomMember?.role });
   } catch (err) {
@@ -132,15 +134,15 @@ export async function leaveRoom(req, res, next) {
 
 export async function invite(req, res, next) {
   try {
-    const { error, value } = validate(inviteSchema, req.body);
+    const { error, value } = validate(inviteSchema, req.body || {});
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
 
-    const token = await roomService.createInvitation(req.params.roomId, req.userId, value);
-    const clientUrl = env.CLIENT_URL || 'http://localhost:5173';
+    const share = await roomService.getShareInvite(req.params.roomId, req.userId, { reset: value.reset });
+    const clientUrl = (env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '');
     res.status(201).json({
       success: true,
-      token,
-      inviteLink: `${clientUrl}/join?token=${token}`,
+      ...share,
+      inviteLink: `${clientUrl}/join?token=${share.code}`,
     });
   } catch (err) {
     next(err);
@@ -206,6 +208,36 @@ export async function getBalances(req, res, next) {
       summary: balances.summary || null,
       month: balances.month || null,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getCycles(req, res, next) {
+  try {
+    const data = await listCycles(req.params.roomId, req.userId);
+    res.json({ success: true, usesCycles: Boolean(data), ...(data || { current: null, cycles: [] }) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Room: owner settles this month early → it goes to history, next month starts now. */
+export async function closeCycleNow(req, res, next) {
+  try {
+    const result = await closeCurrentCycleNow(req.params.roomId, req.userId);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/** Trip/group: owner finishes it (no new expenses) or reopens it. */
+export async function finishGroup(req, res, next) {
+  try {
+    const finished = req.body?.finished !== false;
+    const room = await setGroupFinished(req.params.roomId, req.userId, finished);
+    res.json({ success: true, room });
   } catch (err) {
     next(err);
   }

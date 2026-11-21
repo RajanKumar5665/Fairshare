@@ -27,9 +27,16 @@ const expenseSchema = new mongoose.Schema(
     expenseDate: { type: Date, default: Date.now },
     status: {
       type: String,
-      enum: ["active", "pending_review", "disputed", "cancelled", "settled"],
+      // pending_review: waiting for every participant to approve; not counted in balances yet
+      enum: ["active", "pending_review", "rejected", "disputed", "cancelled", "settled"],
       default: "active",
     },
+    approvedAt: { type: Date, default: null },
+    // Monthly cycle of the room this expense belongs to (rooms only; null for trips/groups)
+    cycle: { type: Number, default: null },
+    carriedOver: { type: Boolean, default: false }, // moved from a closed month while still pending
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    rejectionReason: { type: String, default: "" },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -42,5 +49,6 @@ const expenseSchema = new mongoose.Schema(
 expenseSchema.index({ roomId: 1, expenseDate: -1 });
 expenseSchema.index({ createdBy: 1, expenseDate: -1 });
 expenseSchema.index({ roomId: 1, status: 1 });
+expenseSchema.index({ roomId: 1, cycle: 1 });
 
 export const Expense = mongoose.model("Expense", expenseSchema);

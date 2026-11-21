@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { FcGoogle } from 'react-icons/fc';
+import { useLanguage } from '../context/LanguageContext';
 
 const GOOGLE_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 let initializedClientId = null;
 
 export default function GoogleLoginButton({ redirectUrl = '/' }) {
   const { loginWithGoogle } = useAuth();
+  const { t } = useLanguage();
+  const tRef = useRef(t);
   const loginWithGoogleRef = useRef(loginWithGoogle);
   const redirectUrlRef = useRef(redirectUrl);
   const [ready, setReady] = useState(Boolean(window.google?.accounts?.id));
@@ -17,7 +20,8 @@ export default function GoogleLoginButton({ redirectUrl = '/' }) {
   useEffect(() => {
     loginWithGoogleRef.current = loginWithGoogle;
     redirectUrlRef.current = redirectUrl;
-  }, [loginWithGoogle, redirectUrl]);
+    tRef.current = t;
+  }, [loginWithGoogle, redirectUrl, t]);
 
   useEffect(() => {
     if (!isConfigured || ready) return undefined;
@@ -45,7 +49,7 @@ export default function GoogleLoginButton({ redirectUrl = '/' }) {
             await loginWithGoogleRef.current(credential);
             window.location.assign(redirectUrlRef.current);
           } catch (error) {
-            toast.error(error.message || 'Google login failed');
+            toast.error(error.message || tRef.current('Google login failed'));
           }
         },
         auto_select: false,
@@ -59,21 +63,21 @@ export default function GoogleLoginButton({ redirectUrl = '/' }) {
 
   function startGoogleLogin() {
     if (!isConfigured) {
-      toast.error('Google Sign-In is not configured yet. Please use Mobile OTP or Email.');
+      toast.error(t('Google Sign-In is not configured yet. Please use Mobile OTP or Email.'));
       return;
     }
     if (!ready) {
-      toast('Google sign-in is still loading. Try again in a moment.');
+      toast(t('Google sign-in is still loading. Try again in a moment.'));
       return;
     }
     try {
       window.google.accounts.id.prompt((notification) => {
         if (notification.isNotDisplayed()) {
-          toast.error('Google sign-in popup was blocked or unavailable. Use Mobile OTP or Email.');
+          toast.error(t('Google sign-in popup was blocked or unavailable. Use Mobile OTP or Email.'));
         }
       });
     } catch (err) {
-      toast.error('Could not start Google sign-in. Use Mobile OTP or Email.');
+      toast.error(t('Could not start Google sign-in. Use Mobile OTP or Email.'));
     }
   }
 
@@ -82,12 +86,12 @@ export default function GoogleLoginButton({ redirectUrl = '/' }) {
       className="google-login-button"
       type="button"
       onClick={startGoogleLogin}
-      aria-label="Continue with Google"
+      aria-label={t('Continue with Google')}
     >
       <span className="google-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
         <FcGoogle size={20} />
       </span>
-      <span>Continue with Google</span>
+      <span>{t('Continue with Google')}</span>
     </button>
   );
 }

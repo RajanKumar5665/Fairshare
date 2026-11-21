@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   HiOutlineKey,
   HiOutlineClipboardCopy,
-  HiOutlineUserGroup,
   HiOutlineArrowLeft,
   HiOutlineCheckCircle,
   HiOutlineLightningBolt,
@@ -41,7 +40,7 @@ export default function Join() {
   useEffect(() => {
     const rawToken = params.get('token') || token;
     const cleaned = cleanToken(rawToken);
-    if (cleaned.length < 16) {
+    if (cleaned.replace(/[\s-]/g, '').length < 10) {
       setPreview(null);
       return undefined;
     }
@@ -104,21 +103,24 @@ export default function Join() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', paddingBottom: 40 }}>
+    <div className="d-page join-page">
       {/* ── Top Header ─────────────────────────────────────────── */}
-      <div style={{ marginBottom: 24 }}>
-        <button
-          type="button"
-          className="btn-ghost btn-sm"
-          style={{ marginBottom: 14, gap: 6 }}
-          onClick={() => navigate('/rooms')}
-        >
-          <HiOutlineArrowLeft size={15} /> Back to Rooms
-        </button>
-        <h1 style={{ margin: '0 0 6px 0', fontSize: '1.75rem' }}>Join a Room</h1>
-        <p className="muted subtitle" style={{ margin: 0 }}>
-          Enter the invitation link or code shared by your flatmate to access your shared expenses.
-        </p>
+      <div className="page-header">
+        <div>
+          {user && (
+            <button
+              type="button"
+              className="btn-ghost btn-sm"
+              onClick={() => navigate('/rooms')}
+            >
+              <HiOutlineArrowLeft size={15} /> Back to Rooms
+            </button>
+          )}
+          <h1>Join a Room</h1>
+          <p className="muted subtitle">
+            Enter the invitation link or code shared by your flatmate to access your shared expenses.
+          </p>
+        </div>
       </div>
 
       {/* ── Main Invitation Card ───────────────────────────────── */}
@@ -156,7 +158,7 @@ export default function Join() {
             <label htmlFor="join-token-input" style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 8, display: 'block' }}>
               Invite Code or Link
             </label>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div className="join-input-row">
               <div style={{ flex: 1, position: 'relative' }}>
                 <input
                   id="join-token-input"
@@ -231,8 +233,14 @@ export default function Join() {
 
               <div>
                 <h3 style={{ margin: '0 0 4px 0', fontSize: '1.35rem', color: 'var(--ink)' }}>
+                  {preview.roomType === 'trip' ? '✈️ ' : preview.roomType === 'group' ? '👥 ' : '🏠 '}
                   {preview.roomName}
                 </h3>
+                {preview.memberCount > 0 && (
+                  <p className="muted text-xs" style={{ margin: '4px 0 0' }}>
+                    {preview.memberCount} {preview.memberCount === 1 ? 'person is' : 'people are'} already in this group
+                  </p>
+                )}
                 {preview.roomDescription && (
                   <p className="muted text-sm" style={{ margin: 0 }}>
                     {preview.roomDescription}
@@ -275,7 +283,7 @@ export default function Join() {
               disabled={busy || !token.trim() || (preview && preview.valid === false)}
               style={{ flex: 1, justifyContent: 'center', minHeight: 44 }}
             >
-              {busy ? 'Joining Room…' : preview?.valid ? `Join ${preview.roomName}` : 'Join Room'}
+              {busy ? 'Joining…' : preview?.valid ? `Join ${preview.roomName}` : 'Join group'}
             </button>
             {token && (
               <button
@@ -295,14 +303,7 @@ export default function Join() {
       </div>
 
       {/* ── Feature Highlights ─────────────────────────────────── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: 14,
-          marginTop: 20,
-        }}
-      >
+      <div className="join-highlights">
         <div className="app-card">
           <div style={{ color: 'var(--brand)', marginBottom: 8 }}>
             <HiOutlineCash size={24} />
