@@ -6,7 +6,10 @@ import { createRefreshToken, rotateRefreshToken, revokeAllRefreshTokens } from '
 import { User } from '../../models/user.model.js';
 import { env } from '../../config/env.js';
 
-const isSecureDeployment = env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+// Secure cookies only work over https. On a plain-IP (http) server they would be dropped,
+// so follow the site address: http://IP → normal cookies, https://domain → secure cookies.
+const siteIsHttps = String(env.CLIENT_URL || '').startsWith('https://');
+const isSecureDeployment = (env.NODE_ENV === 'production' && siteIsHttps) || process.env.VERCEL === '1';
 const cookieOptions = {
   httpOnly: true,
   secure: isSecureDeployment,

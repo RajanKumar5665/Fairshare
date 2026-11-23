@@ -506,12 +506,13 @@ export async function getRoomExpenses(roomId, { month, status, page = 1, limit =
     const { start, end } = monthRange(month);
     filter.expenseDate = { $gte: start, $lt: end };
   }
-  const safeLimit = Math.min(200, Math.max(1, Number(limit) || 100));
+  const safeLimit = Math.min(500, Math.max(1, Number(limit) || 100));
   const skip = (Math.max(1, Number(page) || 1) - 1) * safeLimit;
   const expenses = await Expense.find(filter)
     .populate('paidBy', 'name mobile')
     .populate('createdBy', 'name')
     .populate('rejectedBy', 'name')
+    .populate('cancelledBy', 'name')
     .sort({ expenseDate: -1, createdAt: -1 })
     .skip(skip)
     .limit(safeLimit)

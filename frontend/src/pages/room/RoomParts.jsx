@@ -120,9 +120,13 @@ export function ExpenseCard({ expense, me, canManage, busy, onApprove, onReject,
           <div className="rx-exp-actions">
             {canManage && (
               <>
-                <button type="button" className="btn-ghost btn-sm rx-danger" disabled={busy} onClick={() => onDelete(expense)}>
-                  <HiOutlineTrash size={14} /> Delete
-                </button>
+                {['pending_review', 'rejected'].includes(expense.status) ? (
+                  <button type="button" className="btn-ghost btn-sm rx-danger" disabled={busy} onClick={() => onDelete(expense)}>
+                    <HiOutlineTrash size={14} /> Delete
+                  </button>
+                ) : (
+                  <span className="muted text-xs rx-locked">🔒 Approved — can’t be deleted</span>
+                )}
                 <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onEdit(expense)}>
                   <HiOutlinePencil size={14} /> {expense.status === 'rejected' ? 'Fix & resubmit' : 'Edit'}
                 </button>

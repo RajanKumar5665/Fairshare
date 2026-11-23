@@ -8,7 +8,6 @@ import {
   HiOutlineBell,
   HiOutlineChevronLeft,
   HiOutlineChevronRight,
-  HiOutlineLogout,
   HiOutlinePlus,
   HiOutlineShieldCheck,
   HiOutlineUserAdd,
@@ -22,17 +21,45 @@ import { formatINR } from '../utils/money';
 import { notifyApprovalsChanged } from '../hooks/usePendingApprovals';
 import ExpenseSheet from './room/ExpenseSheet';
 import SettleUpTab from './room/SettleUpTab';
-import { Avatar, ExpenseCard, PaymentSheet, RejectSheet } from './room/RoomParts';
+import { ExpenseCard, PaymentSheet, RejectSheet } from './room/RoomParts';
 import { formatInviteCode, sameId, toInputDate, typeMeta } from './room/roomUtils';
 import { CycleBanner, DuesBanner, HistoryTab } from './room/CycleParts';
+import { ActivityFeed, MemberList } from './room/MemberParts';
+import GroupQr from '../components/GroupQr';
 
 const TABS = [
   { id: 'expenses', label: 'Expenses' },
   { id: 'approvals', label: 'Approvals' },
   { id: 'settle', label: 'Settle' },
-  { id: 'history', label: 'History', roomsOnly: true },
+  { id: 'history', label: 'History' },
   { id: 'members', label: 'Members' },
 ];
+const ALL_STATUSES = 'active,pending_review,rejected,disputed,settled,cancelled';
+
+/** Group expenses (already sorted newest first) under "Today", "Yesterday", "Wed, 20 Nov"… */
+function groupByDay(list) {
+  const key = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const today = key(Date.now());
+  const yesterday = key(Date.now() - 86400000);
+  const groups = [];
+  for (const e of list) {
+    const k = key(e.expenseDate);
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== k) {
+      const label =
+        k === today
+          ? 'Today'
+          : k === yesterday
+            ? 'Yesterday'
+            : new Date(e.expenseDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+      g = { key: k, label, items: [], total: 0 };
+      groups.push(g);
+    }
+    g.items.push(e);
+    if (!['rejected', 'pending_review'].includes(e.status)) g.total += e.amountPaise; // approved only
+  }
+  return groups;
+}
 
 /** Normalise an /expenses row (populated paidBy) to the report row shape. */
 function toRow(e) {
@@ -78,6 +105,8 @@ export default function RoomDetail() {
   const [report, setReport] = useState(null);
   const [openItems, setOpenItems] = useState([]); // pending + rejected, all months
   const [balances, setBalances] = useState([]);
+  const [allExpenses, setAllExpenses] = useState([]); // every expense incl. deleted — for Members & History
+  const [historyView, setHistoryView] = useState('activity');
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -110,16 +139,18 @@ export default function RoomDetail() {
     if (style === 'short') return t('Month {n}', { n: viewedCycle });
     return report?.cycle?.index === viewedCycle ? report.monthLabel : t('Month {n}', { n: viewedCycle });
   };
-  const visibleTabs = TABS.filter((x) => !x.roomsOnly || usesCycles);
+  const visibleTabs = TABS;
 
   const loadRoom = useCallback(async () => {
-    const [roomRes, membersRes, balRes, openRes, cycleRes] = await Promise.all([
+    const [roomRes, membersRes, balRes, openRes, cycleRes, allRes] = await Promise.all([
       api(`/api/rooms/${roomId}`),
       api(`/api/rooms/${roomId}/members?includePast=false`),
       api(`/api/rooms/${roomId}/balances`),
       api(`/api/rooms/${roomId}/expenses?status=pending_review,rejected&limit=200`),
       api(`/api/rooms/${roomId}/cycles`),
+      api(`/api/rooms/${roomId}/expenses?status=${ALL_STATUSES}&limit=500`),
     ]);
+    setAllExpenses(allRes.expenses || []);
     setRoom(roomRes.room);
     setMyRole(roomRes.myRole || 'member');
     setCycleInfo({ usesCycles: Boolean(cycleRes.usesCycles), current: cycleRes.current, cycles: cycleRes.cycles || [] });
@@ -331,19 +362,6 @@ export default function RoomDetail() {
       !requireApproval ? t('New expenses will need approval') : t('Approval turned off for new expenses'),
     );
 
-  async function leaveRoom() {
-    if (!window.confirm(t('Leave {name}? You need a zero balance to leave.', { name: room.name }))) return;
-    setBusy(true);
-    try {
-      await api(`/api/rooms/${roomId}/leave`, { method: 'POST' });
-      toast.success(t('You left the room'));
-      navigate('/rooms');
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
@@ -377,72 +395,70 @@ export default function RoomDetail() {
   const monthTotal = report?.totals.approvedPaise || 0;
 
   return (
-    <div className="d-page rd-page rx-page">
-      <section className="d-hero rd-hero dx-hero">
-        <div className="dx-hero-top">
-          <button type="button" className="dx-chip" onClick={() => navigate('/rooms')}>
-            <HiOutlineArrowLeft size={15} /> {t('Groups')}
+    <div className="d-page rd-page rx-page ax-page">
+      {/* ── App bar ─────────────────────────────────────────────── */}
+      <header className="ax-bar">
+        <button type="button" className="ax-icon-btn" onClick={() => navigate('/rooms')} aria-label={t('Back to groups')}>
+          <HiOutlineArrowLeft size={20} />
+        </button>
+        <div className="ax-bar-title">
+          <span className="ax-bar-emoji" aria-hidden="true">
+            {meta.emoji}
+          </span>
+          <div>
+            <h1 className="rx-ellipsis">{room.name}</h1>
+            <p className="rx-ellipsis">
+              {[
+                members.length === 1 ? t('{n} person', { n: members.length }) : t('{n} people', { n: members.length }),
+                room.address || room.description,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          </div>
+        </div>
+        {canInvite && (
+          <button type="button" className="ax-invite" onClick={() => setInviteOpen(true)}>
+            <HiOutlineUserAdd size={17} />
+            <span>{t('Invite')}</span>
           </button>
-          {canInvite && (
-            <button type="button" className="dx-chip strong" onClick={() => setInviteOpen(true)}>
-              <HiOutlineUserAdd size={15} /> {t('Invite')}
-            </button>
-          )}
-        </div>
-        <div className="dx-room-title">
-          <h1>
-            <span aria-hidden="true">{meta.emoji} </span>
-            {room.name}
-          </h1>
-          <p>
-            {[
-              room.address || room.description,
-              members.length === 1 ? t('{n} person', { n: members.length }) : t('{n} people', { n: members.length }),
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-        </div>
-        <div className="dx-amount">
-          <span>{t('{period} total', { period: periodTitle('short') })}</span>
-          <strong>{reportLoading && !report ? '—' : formatINR(monthTotal)}</strong>
-        </div>
-      </section>
+        )}
+      </header>
 
-      <div className="d-stats rx-stats">
-        <div className="d-stat">
-          <div className="d-stat-lbl">{t('You paid')}</div>
-          <div className="d-stat-val">{formatINR(myLine?.paidPaise || 0)}</div>
-          <small className="muted">{month === 'all' ? allLabel.toLowerCase() : t('in {period}', { period: periodTitle('short') })}</small>
-        </div>
-        <div className="d-stat">
-          <div className="d-stat-lbl">{t('Your share')}</div>
-          <div className="d-stat-val">{formatINR(myLine?.sharePaise || 0)}</div>
-          <small className="muted">{t('what you used')}</small>
-        </div>
-        <div className="d-stat">
-          <div className="d-stat-lbl">{t('Overall balance')}</div>
-          <div className={`d-stat-val ${myAllTime?.netPaise > 0 ? 'rx-amt-pos' : myAllTime?.netPaise < 0 ? 'rx-amt-neg' : ''}`}>
+      {/* ── Summary card ───────────────────────────────────────── */}
+      <section className="ax-summary" aria-label={t('Summary')}>
+        <div className="ax-summary-top">
+          <div>
+            <span className="ax-summary-label">{t('{period} total', { period: periodTitle('short') })}</span>
+            <strong className="ax-summary-total">{reportLoading && !report ? '—' : formatINR(monthTotal)}</strong>
+          </div>
+          <span
+            className={`ax-balance ${!myAllTime || myAllTime.netPaise === 0 ? 'even' : myAllTime.netPaise > 0 ? 'pos' : 'neg'}`}
+            title={t('Overall balance')}
+          >
             {!myAllTime || myAllTime.netPaise === 0
               ? t('All even')
               : myAllTime.netPaise > 0
-                ? `+${formatINR(myAllTime.netPaise)}`
-                : `−${formatINR(-myAllTime.netPaise)}`}
-          </div>
-          <small className="muted">
-            {!myAllTime || myAllTime.netPaise === 0 ? t('nothing pending') : myAllTime.netPaise > 0 ? t('you get back') : t('you owe')}
-          </small>
+                ? t('You get {amount}', { amount: formatINR(myAllTime.netPaise) })
+                : t('You owe {amount}', { amount: formatINR(-myAllTime.netPaise) })}
+          </span>
         </div>
-      </div>
+        <div className="ax-summary-stats">
+          <div>
+            <span>{t('You paid')}</span>
+            <strong>{formatINR(myLine?.paidPaise || 0)}</strong>
+          </div>
+          <div>
+            <span>{t('Your share')}</span>
+            <strong>{formatINR(myLine?.sharePaise || 0)}</strong>
+          </div>
+          <div>
+            <span>{t('Expenses')}</span>
+            <strong>{report?.expenses?.filter((e) => e.status !== 'rejected').length ?? '—'}</strong>
+          </div>
+        </div>
+      </section>
 
-      <DuesBanner
-        cycles={cycleInfo.cycles}
-        hidden={tab === 'history'}
-        onOpen={(index) => {
-          setMonth(`c${index}`);
-          setTab('settle');
-        }}
-      />
 
       {approvalsCount > 0 && tab !== 'approvals' && (
         <button type="button" className="rx-alert" onClick={() => setTab('approvals')}>
@@ -461,14 +477,14 @@ export default function RoomDetail() {
         </button>
       )}
 
-      <div className="rx-tabs" role="tablist" aria-label={t('Room sections')}>
+      <div className="ax-tabs" role="tablist" aria-label={t('Room sections')}>
         {visibleTabs.map((tb) => (
           <button
             key={tb.id}
             type="button"
             role="tab"
             aria-selected={tab === tb.id}
-            className={`rx-tab ${tab === tb.id ? 'active' : ''}`}
+            className={`ax-tab ${tab === tb.id ? 'active' : ''}`}
             onClick={() => setTab(tb.id)}
           >
             {t(tb.label)}
@@ -478,7 +494,8 @@ export default function RoomDetail() {
       </div>
 
       {(tab === 'expenses' || tab === 'settle') && usesCycles && month && currentCycle && (
-        <div className="rx-month">
+        <div className="ax-period">
+          <div className="ax-period-nav">
           <button
             type="button"
             aria-label={t('Previous month')}
@@ -487,7 +504,7 @@ export default function RoomDetail() {
           >
             <HiOutlineChevronLeft size={18} />
           </button>
-          <span className="rx-month-title">
+          <span className="ax-period-title">
             <strong>{month === 'all' ? allLabel : t('Month {n}', { n: viewedCycle })}</strong>
             <small className="muted">
               {month === 'all'
@@ -509,9 +526,10 @@ export default function RoomDetail() {
           >
             <HiOutlineChevronRight size={18} />
           </button>
+          </div>
           <button
             type="button"
-            className={`rx-all-toggle ${month === 'all' ? 'on' : ''}`}
+            className={`ax-all ${month === 'all' ? 'on' : ''}`}
             onClick={() => setMonth(month === 'all' ? `c${currentCycle.index}` : 'all')}
           >
             {month === 'all' ? t('By month') : t('All time')}
@@ -537,9 +555,9 @@ export default function RoomDetail() {
       )}
 
       {/* ── Expenses ─────────────────────────────────────────────────────── */}
-      {(tab === 'expenses' || (tab === 'history' && !usesCycles)) && (
+      {tab === 'expenses' && (
         <section className="rx-stack" role="tabpanel">
-          <div className="rx-section-head">
+          <div className="rx-section-head ax-desktop-only">
             <div>
               <h2>{t('Expenses')}</h2>
             </div>
@@ -591,19 +609,30 @@ export default function RoomDetail() {
               )}
             </div>
           ) : (
-            <div className="d-list">
-              {monthExpenses.map((e) => (
-                <ExpenseCard monthlyEqual={groupType === 'room'}
-                  key={e._id}
-                  expense={e}
-                  me={me}
-                  busy={busy}
-                  canManage={canManage(e)}
-                  onApprove={approve}
-                  onReject={setRejecting}
-                  onEdit={(x) => setSheet({ kind: 'edit', expense: x })}
-                  onDelete={remove}
-                />
+            <div className="ax-days">
+              {groupByDay(monthExpenses).map((day) => (
+                <div key={day.key} className="ax-day">
+                  <div className="ax-day-head">
+                    <span>{day.label}</span>
+                    {day.total > 0 && <span>{formatINR(day.total)}</span>}
+                  </div>
+                  <div className="ax-list">
+                    {day.items.map((e) => (
+                      <ExpenseCard
+                        monthlyEqual={groupType === 'room'}
+                        key={e._id}
+                        expense={e}
+                        me={me}
+                        busy={busy}
+                        canManage={canManage(e)}
+                        onApprove={approve}
+                        onReject={setRejecting}
+                        onEdit={(x) => setSheet({ kind: 'edit', expense: x })}
+                        onDelete={remove}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -720,16 +749,38 @@ export default function RoomDetail() {
           <div className="skeleton skeleton-card" style={{ height: 240 }} />
         ))}
 
-      {/* ── History (flats) ─────────────────────────────────────────────── */}
-      {tab === 'history' && usesCycles && (
-        <HistoryTab
-          info={cycleInfo}
-          me={me}
-          onOpen={(index) => {
-            setMonth(`c${index}`);
-            setTab('settle');
-          }}
-        />
+      {/* ── History: who did what + (flats) closed months ─────────────────── */}
+      {tab === 'history' && (
+        <section className="rx-stack" role="tabpanel">
+          <div className="rx-section-head">
+            <div>
+              <h2>{t('History')}</h2>
+              <p className="muted">{t('Who added, approved or deleted each expense, and when.')}</p>
+            </div>
+          </div>
+          {usesCycles && (
+            <div className="d-chips">
+              <button type="button" className={`d-chip ${historyView === 'activity' ? 'active' : ''}`} onClick={() => setHistoryView('activity')}>
+                {t('Activity')}
+              </button>
+              <button type="button" className={`d-chip ${historyView === 'months' ? 'active' : ''}`} onClick={() => setHistoryView('months')}>
+                {t('Months')}
+              </button>
+            </div>
+          )}
+          {usesCycles && historyView === 'months' ? (
+            <HistoryTab
+              info={cycleInfo}
+              me={me}
+              onOpen={(index) => {
+                setMonth(`c${index}`);
+                setTab('settle');
+              }}
+            />
+          ) : (
+            <ActivityFeed expenses={allExpenses} me={me} />
+          )}
+        </section>
       )}
 
       {/* ── Members ──────────────────────────────────────────────────────── */}
@@ -738,7 +789,9 @@ export default function RoomDetail() {
           <div className="rx-section-head">
             <div>
               <h2>{t('Members')}</h2>
-              <p className="muted">{t('{n} people · overall balance', { n: balances.filter((b) => b.isCurrentMember).length })}</p>
+              <p className="muted">
+                {t('{n} people · tap a name to see their expenses', { n: balances.filter((b) => b.isCurrentMember).length })}
+              </p>
             </div>
             {canInvite && (
               <button type="button" className="btn-ghost btn-sm" onClick={() => setInviteOpen(true)}>
@@ -747,33 +800,7 @@ export default function RoomDetail() {
             )}
           </div>
 
-          <ul className="rx-members">
-            {balances
-              .filter((b) => b.isCurrentMember || b.netPaise !== 0)
-              .map((b) => (
-                <li key={b.userId}>
-                  <Avatar name={b.name} size={40} />
-                  <div className="rx-member-main">
-                    <strong className="rx-ellipsis">
-                      {b.name}
-                      {sameId(b.userId, me) ? ` (${t('you')})` : ''}
-                    </strong>
-                    <small className="muted">
-                      {b.isCurrentMember ? (b.role === 'owner' ? t('Owner') : b.role === 'admin' ? t('Admin') : t('Member')) : t('Moved out')}
-                    </small>
-                  </div>
-                  <div className="rx-member-bal">
-                    {b.netPaise > 0 ? (
-                      <span className="rx-amt-pos">{t('gets {amount}', { amount: formatINR(b.netPaise) })}</span>
-                    ) : b.netPaise < 0 ? (
-                      <span className="rx-amt-neg">{t('owes {amount}', { amount: formatINR(-b.netPaise) })}</span>
-                    ) : (
-                      <span className="rx-amt-zero">{t('even')}</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-          </ul>
+          <MemberList balances={balances} expenses={allExpenses} me={me} />
 
           <div className="rx-card rx-setting">
             <span className="rx-setting-ico">
@@ -806,18 +833,13 @@ export default function RoomDetail() {
               {t('Only the person who created this group can invite new people. Ask them for the link.')}
             </p>
           )}
-
-          {!isOwner && (
-            <button type="button" className="btn-ghost rx-danger rx-leave" onClick={leaveRoom} disabled={busy}>
-              <HiOutlineLogout size={16} /> {t('Leave group')}
-            </button>
-          )}
         </section>
       )}
 
       {canAdd && !sheet && !rejecting && !paying && !inviteOpen && (
-        <button className="d-fab rd-fab" aria-label={t('Add room expense')} onClick={() => setSheet({ kind: 'add' })}>
-          <HiOutlinePlus size={26} />
+        <button className="ax-fab" aria-label={t('Add room expense')} onClick={() => setSheet({ kind: 'add' })}>
+          <HiOutlinePlus size={22} />
+          <span>{t('Add expense')}</span>
         </button>
       )}
 
@@ -855,6 +877,7 @@ function InviteSheet({ roomId, roomName, groupType, onClose }) {
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(null);
+  const [view, setView] = useState('qr'); // 'qr' | 'link'
 
   const load = useCallback(
     async (reset = false) => {
@@ -879,6 +902,8 @@ function InviteSheet({ roomId, roomName, groupType, onClose }) {
 
   const code = invite?.code || '';
   const url = code ? `${window.location.origin}/join?token=${code}` : '';
+  // The QR adds auto=1: after scanning (and signing up if needed) the person joins without another tap.
+  const qrUrl = code ? `${url}&auto=1` : '';
   const inviteVars = { name: roomName, url, code: formatInviteCode(code) };
   const message =
     groupType === 'trip'
@@ -928,6 +953,19 @@ function InviteSheet({ roomId, roomName, groupType, onClose }) {
           </div>
         ) : code ? (
           <div className="stack" style={{ gap: 14 }}>
+            <div className="gq-switch" role="tablist">
+              <button type="button" role="tab" aria-selected={view === 'qr'} className={view === 'qr' ? 'on' : ''} onClick={() => setView('qr')}>
+                {t('QR code')}
+              </button>
+              <button type="button" role="tab" aria-selected={view === 'link'} className={view === 'link' ? 'on' : ''} onClick={() => setView('link')}>
+                {t('Link & code')}
+              </button>
+            </div>
+
+            {view === 'qr' ? (
+              <GroupQr url={qrUrl} roomName={roomName} code={formatInviteCode(code)} groupType={groupType} />
+            ) : (
+            <>
             <div className="invite-code-box">
               <div className="invite-code-label">
                 <span>{t('Group code')}</span>
@@ -958,6 +996,8 @@ function InviteSheet({ roomId, roomName, groupType, onClose }) {
                 </button>
               )}
             </div>
+            </>
+            )}
 
             <p className="muted text-xs" style={{ margin: 0 }}>
               {t('Valid till {date}.', {

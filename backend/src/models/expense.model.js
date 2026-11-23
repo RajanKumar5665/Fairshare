@@ -37,6 +37,8 @@ const expenseSchema = new mongoose.Schema(
     carriedOver: { type: Boolean, default: false }, // moved from a closed month while still pending
     rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     rejectionReason: { type: String, default: "" },
+    cancelledAt: { type: Date, default: null },
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

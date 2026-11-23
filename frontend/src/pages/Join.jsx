@@ -1,17 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { api } from '../api/client';
-import { useAuth } from '../context/AuthContext';
 import {
-  HiOutlineKey,
-  HiOutlineClipboardCopy,
   HiOutlineArrowLeft,
   HiOutlineCheckCircle,
-  HiOutlineLightningBolt,
-  HiOutlineCash,
-  HiOutlineShieldCheck,
+  HiOutlineClipboardCopy,
+  HiOutlineExclamationCircle,
+  HiOutlinePhotograph,
+  HiOutlineQrcode,
+  HiOutlineX,
 } from 'react-icons/hi';
+import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import QrScanner, { decodeQrFile } from '../components/QrScanner';
+import { formatInviteCode } from './room/roomUtils';
+
+/** Pull the invite code out of whatever was typed, pasted or scanned (code, link, or QR text). */
+function cleanToken(input) {
+  if (!input) return '';
+  const trimmed = String(input).trim();
+  if (trimmed.includes('token=')) {
+    try {
+      const url = new URL(trimmed.startsWith('http') ? trimmed : `http://x.local/${trimmed}`);
+      return url.searchParams.get('token') || '';
+    } catch {
+      const match = trimmed.match(/token=([a-zA-Z0-9_-]+)/);
+      return match ? match[1] : '';
+    }
+  }
+  return trimmed.replace(/[\s-]/g, '').toUpperCase();
+}
+
+const TYPE_EMOJI = { trip: '✈️', group: '👥', room: '🏠' };
 
 export default function Join() {
   const [params] = useSearchParams();
@@ -21,325 +41,280 @@ export default function Join() {
   const [preview, setPreview] = useState(null);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [readingPhoto, setReadingPhoto] = useState(false);
+  const fileRef = useRef(null);
+  const resultRef = useRef(null);
+  const autoTried = useRef(false);
+  const autoJoin = params.get('auto') === '1';
 
-  function cleanToken(input) {
-    if (!input) return '';
-    const trimmed = input.trim();
-    if (trimmed.includes('token=')) {
-      try {
-        const url = new URL(trimmed.startsWith('http') ? trimmed : `http://dummy.com/${trimmed}`);
-        return url.searchParams.get('token') || trimmed;
-      } catch {
-        const match = trimmed.match(/token=([a-zA-Z0-9_-]+)/);
-        return match ? match[1] : trimmed;
-      }
-    }
-    return trimmed;
-  }
+  const code = cleanToken(token);
+  const looksComplete = code.length >= 10;
 
+  // Look the code up as soon as it is complete
   useEffect(() => {
-    const rawToken = params.get('token') || token;
-    const cleaned = cleanToken(rawToken);
-    if (cleaned.replace(/[\s-]/g, '').length < 10) {
+    if (!looksComplete) {
       setPreview(null);
       return undefined;
     }
-    const timer = window.setTimeout(() => checkInvite(cleaned), 350);
-    return () => window.clearTimeout(timer);
-  }, [params, token]);
-
-  async function checkInvite(code) {
-    setChecking(true);
-    try {
-      const data = await api(`/api/rooms/invitations/info?token=${encodeURIComponent(code)}`);
-      setPreview(data);
-    } catch {
-      setPreview({ valid: false, message: 'Could not verify invitation code' });
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  async function handlePaste() {
-    try {
-      const clipText = await navigator.clipboard.readText();
-      if (clipText) {
-        setToken(clipText.trim());
-        toast.success('Pasted from clipboard!');
+    let alive = true;
+    const timer = window.setTimeout(async () => {
+      setChecking(true);
+      try {
+        const data = await api(`/api/rooms/invitations/info?token=${encodeURIComponent(code)}`);
+        if (alive) setPreview(data);
+      } catch {
+        if (alive) setPreview({ valid: false, message: 'We could not check this code. Check your internet and try again.' });
+      } finally {
+        if (alive) setChecking(false);
       }
-    } catch {
-      toast.error('Unable to access clipboard. Please paste manually.');
-    }
+    }, 300);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [code, looksComplete]);
+
+  // Bring the "group found" card into view after a scan / paste on small screens
+  useEffect(() => {
+    if (preview) resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [preview]);
+
+  // Came from a QR (or back from sign-up / login): join without another tap.
+  useEffect(() => {
+    if (!user || !autoJoin || autoTried.current) return;
+    const c = cleanToken(params.get('token') || '');
+    if (!c) return;
+    autoTried.current = true;
+    sessionStorage.removeItem('pending_redirect');
+    join(c);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, autoJoin, params]);
+
+  /** Signed-out: go to sign-up / login, then come back here and join automatically. */
+  function goAuth(page) {
+    const back = `/join?token=${encodeURIComponent(code)}&auto=1`;
+    sessionStorage.setItem('pending_redirect', back);
+    navigate(`/${page}?redirect=${encodeURIComponent(back)}`);
   }
 
-  async function onJoin(e) {
-    if (e) e.preventDefault();
-    const tokenToUse = cleanToken(token || params.get('token') || '');
-    if (!tokenToUse) {
-      toast.error('Please enter a valid invite code or paste the invite link');
-      return;
-    }
-
-    if (!user) {
-      const returnUrl = encodeURIComponent(`/join?token=${tokenToUse}`);
-      sessionStorage.setItem('pending_redirect', `/join?token=${tokenToUse}`);
-      navigate(`/login?redirect=${returnUrl}`);
-      return;
-    }
-
+  async function join(c = code) {
+    if (!c) return toast.error('Enter the group code first');
+    if (!user) return goAuth('login');
     setBusy(true);
     try {
-      const data = await api('/api/rooms/join', {
-        method: 'POST',
-        body: JSON.stringify({ token: tokenToUse }),
-      });
-      toast.success('Joined room successfully!');
-      navigate(`/rooms/${data.roomId}`);
+      const data = await api('/api/rooms/join', { method: 'POST', body: JSON.stringify({ token: c }) });
+      toast.success('You joined the group!');
+      navigate(`/rooms/${data.roomId}`, { replace: true });
     } catch (err) {
-      toast.error(err.message || 'Failed to join room. Please check the invite link.');
+      toast.error(err.message || 'Could not join. Check the code and try again.');
     } finally {
       setBusy(false);
     }
   }
 
+  function applyScanned(text) {
+    const c = cleanToken(text);
+    if (!c || c.length < 10 || c.length > 64) {
+      toast.error('That QR is not a FairShare group invite');
+      return;
+    }
+    setToken(c);
+    toast.success('QR scanned');
+  }
+
+  function onScanned(text) {
+    setScanning(false);
+    applyScanned(text);
+  }
+
+  async function onPhoto(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setReadingPhoto(true);
+    try {
+      const text = await decodeQrFile(file);
+      if (text) applyScanned(text);
+      else toast.error('No QR found in that photo. Try a clearer one.');
+    } catch {
+      toast.error('Could not read that image');
+    } finally {
+      setReadingPhoto(false);
+    }
+  }
+
+  async function paste() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setToken(text.trim());
+    } catch {
+      toast.error('Could not read the clipboard — long-press the box and paste');
+    }
+  }
+
+  const shownValue = token.includes('token=') ? token : formatInviteCode(code) || token;
+
   return (
-    <div className="d-page join-page">
-      {/* ── Top Header ─────────────────────────────────────────── */}
-      <div className="page-header">
-        <div>
-          {user && (
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => navigate('/rooms')}
-            >
-              <HiOutlineArrowLeft size={15} /> Back to Rooms
-            </button>
-          )}
-          <h1>Join a Room</h1>
-          <p className="muted subtitle">
-            Enter the invitation link or code shared by your flatmate to access your shared expenses.
-          </p>
-        </div>
+    <div className="d-page join-page jx-page">
+      <header className="jx-head">
+        {user && (
+          <button type="button" className="dx-chip jx-back" onClick={() => navigate('/rooms')}>
+            <HiOutlineArrowLeft size={15} /> Groups
+          </button>
+        )}
+        <h1>Join a group</h1>
+        <p className="muted">Scan the QR your friend shared, or type their group code.</p>
+      </header>
+
+      {/* ── 1. Scan (main option) ─────────────────────────────── */}
+      <button type="button" className="jx-scan" onClick={() => setScanning(true)} aria-label="Scan QR code with camera">
+        <span className="jx-viewfinder" aria-hidden="true">
+          <i className="tl" />
+          <i className="tr" />
+          <i className="bl" />
+          <i className="br" />
+          <HiOutlineQrcode className="jx-viewfinder-ico" />
+          <span className="jx-viewfinder-line" />
+        </span>
+        <strong>Tap to scan QR</strong>
+        <small>Opens your camera</small>
+      </button>
+
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPhoto} />
+      <button type="button" className="jx-upload" onClick={() => fileRef.current?.click()} disabled={readingPhoto}>
+        <HiOutlinePhotograph size={18} />
+        {readingPhoto ? 'Reading photo…' : 'Got the QR as an image? Upload it'}
+      </button>
+
+      {/* ── 2. Or type the code ───────────────────────────────── */}
+      <div className="gq-or" aria-hidden="true">
+        <span>or enter the code</span>
       </div>
 
-      {/* ── Main Invitation Card ───────────────────────────────── */}
-      <div
-        className="app-card stack"
-        style={{
-          gap: 22,
+      <form
+        className="jx-code"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (preview?.valid) join();
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: 'var(--brand-soft)',
-              display: 'grid',
-              placeItems: 'center',
-              color: 'var(--brand)',
-              flexShrink: 0,
-            }}
-          >
-            <HiOutlineKey size={22} />
-          </div>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Room Invitation Code</h2>
-            <p className="muted text-xs" style={{ margin: '2px 0 0 0' }}>
-              Paste your invite code or the full invitation link below
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={onJoin} className="stack" style={{ gap: 16 }}>
-          <div>
-            <label htmlFor="join-token-input" style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: 8, display: 'block' }}>
-              Invite Code or Link
-            </label>
-            <div className="join-input-row">
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input
-                  id="join-token-input"
-                  type="text"
-                  autoComplete="off"
-                  placeholder="Paste invite code or link here…"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  autoFocus
-                  style={{
-                    width: '100%',
-                    minHeight: 44,
-                    padding: '10px 14px',
-                    borderRadius: 12,
-                    border: '1.5px solid var(--line)',
-                    background: 'var(--bg-2)',
-                    color: 'var(--ink)',
-                    fontSize: '0.95rem',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    transition: 'all 0.15s ease',
-                  }}
-                />
-              </div>
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={handlePaste}
-                title="Paste from clipboard"
-                style={{ flexShrink: 0, minHeight: 44, padding: '0 16px', gap: 6 }}
-              >
-                <HiOutlineClipboardCopy size={16} />
-                Paste
-              </button>
-            </div>
-          </div>
-
-          {checking && (
-            <div style={{ padding: '16px 20px', textAlign: 'center', background: 'var(--bg)', borderRadius: 12, border: '1px solid var(--line)' }}>
-              <span className="spinner" style={{ width: 22, height: 22, margin: '0 auto 8px' }} />
-              <p className="muted text-xs" style={{ margin: 0 }}>Verifying invitation code…</p>
-            </div>
-          )}
-
-          {preview && preview.valid === false && (
-            <div className="alert warn" style={{ fontSize: '0.88rem' }}>
-              {preview.message || 'Invitation is invalid or has expired'}
-            </div>
-          )}
-
-          {preview && preview.valid && (
-            <div
-              className="stack"
-              style={{
-                gap: 14,
-                background: 'var(--bg)',
-                borderRadius: 14,
-                padding: '18px 20px',
-                border: '1.5px solid var(--brand)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className="badge success" style={{ gap: 4, display: 'inline-flex', alignItems: 'center' }}>
-                  <HiOutlineCheckCircle size={14} /> Valid Invitation
-                </span>
-                {preview.inviterName && (
-                  <span className="text-xs muted">
-                    Invited by <strong>{preview.inviterName}</strong>
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '1.35rem', color: 'var(--ink)' }}>
-                  {preview.roomType === 'trip' ? '✈️ ' : preview.roomType === 'group' ? '👥 ' : '🏠 '}
-                  {preview.roomName}
-                </h3>
-                {preview.memberCount > 0 && (
-                  <p className="muted text-xs" style={{ margin: '4px 0 0' }}>
-                    {preview.memberCount} {preview.memberCount === 1 ? 'person is' : 'people are'} already in this group
-                  </p>
-                )}
-                {preview.roomDescription && (
-                  <p className="muted text-sm" style={{ margin: 0 }}>
-                    {preview.roomDescription}
-                  </p>
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  padding: '10px 14px',
-                  background: 'var(--card-bg)',
-                  borderRadius: 10,
-                  border: '1px solid var(--line)',
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 120 }}>
-                  <span className="text-xs muted">Currency</span>
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>
-                    {preview.currency || 'INR (₹)'}
-                  </div>
-                </div>
-                <div style={{ flex: 1, minWidth: 120 }}>
-                  <span className="text-xs muted">Role upon joining</span>
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--brand)' }}>
-                    Room Member
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-            <button
-              id="join-room-submit-btn"
-              className="btn-primary"
-              type="submit"
-              disabled={busy || !token.trim() || (preview && preview.valid === false)}
-              style={{ flex: 1, justifyContent: 'center', minHeight: 44 }}
-            >
-              {busy ? 'Joining…' : preview?.valid ? `Join ${preview.roomName}` : 'Join group'}
+        <label htmlFor="join-code" className="sr-only">
+          Group code or invite link
+        </label>
+        <div className={`jx-input ${preview?.valid ? 'ok' : preview && preview.valid === false ? 'bad' : ''}`}>
+          <input
+            id="join-code"
+            type="text"
+            inputMode="text"
+            autoComplete="off"
+            autoCapitalize="characters"
+            spellCheck={false}
+            placeholder="ABCD-EFGH-JK"
+            value={shownValue}
+            onChange={(e) => setToken(e.target.value)}
+          />
+          {token ? (
+            <button type="button" className="jx-input-btn" onClick={() => setToken('')} aria-label="Clear code">
+              <HiOutlineX size={18} />
             </button>
-            {token && (
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => {
-                  setToken('');
-                  setPreview(null);
-                }}
-                style={{ minHeight: 44 }}
-              >
-                Clear
+          ) : (
+            <button type="button" className="jx-input-btn text" onClick={paste}>
+              <HiOutlineClipboardCopy size={16} /> Paste
+            </button>
+          )}
+        </div>
+        <small className="muted jx-input-hint">10 letters/numbers, or paste the whole invite link.</small>
+      </form>
+
+      {/* ── 3. Result ─────────────────────────────────────────── */}
+      <div ref={resultRef}>
+        {checking && (
+          <div className="jx-result checking">
+            <span className="spinner" style={{ width: 20, height: 20 }} /> Checking code…
+          </div>
+        )}
+
+        {!checking && preview && preview.valid === false && (
+          <div className="jx-result bad">
+            <HiOutlineExclamationCircle size={22} />
+            <div>
+              <strong>This code doesn’t work</strong>
+              <small>Check the code for typos, or ask the group owner to share the QR again — they may have reset it.</small>
+            </div>
+          </div>
+        )}
+
+        {!checking && preview?.valid && (
+          <div className="jx-result ok">
+            <div className="jx-found">
+              <span className="jx-found-emoji">{TYPE_EMOJI[preview.roomType] || '👥'}</span>
+              <div className="jx-found-main">
+                <span className="jx-found-tag">
+                  <HiOutlineCheckCircle size={14} /> Group found
+                </span>
+                <strong className="rx-ellipsis">{preview.roomName}</strong>
+                <small className="muted">
+                  {[
+                    preview.inviterName && `Invited by ${preview.inviterName}`,
+                    preview.memberCount > 0 && `${preview.memberCount} ${preview.memberCount === 1 ? 'member' : 'members'}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </small>
+              </div>
+            </div>
+
+            {user ? (
+              <button type="button" className="btn-primary jx-cta" onClick={() => join()} disabled={busy}>
+                {busy ? 'Joining…' : `Join ${preview.roomName}`}
               </button>
+            ) : (
+              <>
+                <button type="button" className="btn-primary jx-cta" onClick={() => goAuth('register')}>
+                  Create account &amp; join
+                </button>
+                <button type="button" className="btn-ghost jx-cta" onClick={() => goAuth('login')}>
+                  I already have an account — Log in
+                </button>
+                <small className="muted jx-note">You’ll be added to the group right after.</small>
+              </>
             )}
           </div>
-        </form>
+        )}
+
+        {user && autoJoin && busy && (
+          <div className="jx-result checking">
+            <span className="spinner" style={{ width: 20, height: 20 }} /> Adding you to the group…
+          </div>
+        )}
       </div>
 
-      {/* ── Feature Highlights ─────────────────────────────────── */}
-      <div className="join-highlights">
-        <div className="app-card">
-          <div style={{ color: 'var(--brand)', marginBottom: 8 }}>
-            <HiOutlineCash size={24} />
-          </div>
-          <strong style={{ display: 'block', fontSize: '0.96rem', marginBottom: 4 }}>
-            Automatic Splitting
-          </strong>
-          <p className="muted text-xs" style={{ margin: 0, lineHeight: 1.5 }}>
-            Room expenses are split equally among all members automatically.
-          </p>
-        </div>
+      {/* ── How it works ──────────────────────────────────────── */}
+      {!preview && (
+        <ol className="jx-steps">
+          <li>
+            <span>1</span>
+            <p>
+              <strong>Scan</strong> The QR or enter the code
+            </p>
+          </li>
+          <li>
+            <span>2</span>
+            <p>
+              <strong>{user ? 'Check' : 'Sign up'}</strong> {user ? 'The group name' : 'Or log in'}
+            </p>
+          </li>
+          <li>
+            <span>3</span>
+            <p>
+              <strong>You’re in</strong> Start adding expenses
+            </p>
+          </li>
+        </ol>
+      )}
 
-        <div className="app-card">
-          <div style={{ color: 'var(--brand)', marginBottom: 8 }}>
-            <HiOutlineLightningBolt size={24} />
-          </div>
-          <strong style={{ display: 'block', fontSize: '0.96rem', marginBottom: 4 }}>
-            Instant Settlement
-          </strong>
-          <p className="muted text-xs" style={{ margin: 0, lineHeight: 1.5 }}>
-            Clear balances via UPI and settle accounts with one tap.
-          </p>
-        </div>
-
-        <div className="app-card">
-          <div style={{ color: 'var(--brand)', marginBottom: 8 }}>
-            <HiOutlineShieldCheck size={24} />
-          </div>
-          <strong style={{ display: 'block', fontSize: '0.96rem', marginBottom: 4 }}>
-            100% Transparent
-          </strong>
-          <p className="muted text-xs" style={{ margin: 0, lineHeight: 1.5 }}>
-            Full history of who paid what and when for everyone in the room.
-          </p>
-        </div>
-      </div>
+      {scanning && <QrScanner onResult={onScanned} onClose={() => setScanning(false)} />}
     </div>
   );
 }

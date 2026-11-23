@@ -33,7 +33,10 @@ router.post('/join', inviteLimiter, roomController.join);
 router.get('/:roomId', requireRoomMember(), roomController.getRoom);
 router.patch('/:roomId', requireRoomMember(['owner', 'admin']), roomController.updateRoom);
 router.delete('/:roomId', requireRoomMember(['owner']), roomController.deleteRoom);
-router.post('/:roomId/leave', requireRoomMember(), roomController.leaveRoom);
+// Leaving a group is turned off: members stay so the shared hisaab stays complete.
+router.post('/:roomId/leave', requireRoomMember(), (req, res) =>
+  res.status(403).json({ success: false, message: 'Leaving a group is not allowed.' }),
+);
 router.post('/:roomId/transfer-ownership', requireRoomMember(['owner']), roomController.transferOwnership);
 
 router.get('/:roomId/expenses', requireRoomMember(), roomController.listExpenses);

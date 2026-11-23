@@ -337,10 +337,14 @@ export async function cancelExpense(expenseId, userId) {
   const expense = await Expense.findById(expenseId);
   if (!expense) throw new AppError('Expense not found', 404);
   await assertCanManageExpense(expense, userId);
+  if (expense.status === 'cancelled') throw new AppError('This expense was already deleted', 400);
+  // Once everyone has approved a shared expense it is part of the hisaab for good.
   if (expense.type === 'shared' && !['rejected', 'pending_review'].includes(expense.status)) {
-    await assertCycleOpen(expense.roomId, expense.cycle, 'delete this expense');
+    throw new AppError('Approved expenses cannot be deleted. Ask the group to add a correcting expense instead.', 403);
   }
   expense.status = 'cancelled';
+  expense.cancelledAt = new Date();
+  expense.cancelledBy = userId;
   await expense.save();
   return expense;
 }

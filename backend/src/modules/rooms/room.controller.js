@@ -191,8 +191,8 @@ export async function join(req, res, next) {
 
 export async function listExpenses(req, res, next) {
   try {
-    const { month, status } = req.query;
-    const expenses = await roomService.getRoomExpenses(req.params.roomId, { month, status });
+    const { month, status, limit } = req.query;
+    const expenses = await roomService.getRoomExpenses(req.params.roomId, { month, status, limit });
     res.json({ success: true, expenses });
   } catch (err) {
     next(err);

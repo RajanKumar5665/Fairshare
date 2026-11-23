@@ -37,7 +37,11 @@ const colors = { api: '\x1b[36m', web: '\x1b[35m' };
 const children = [];
 
 function run(name, cwd) {
-  const child = spawn(npm, ['run', 'dev'], { cwd: path.join(root, cwd), shell: process.platform === 'win32', env: process.env });
+  // On Windows npm is a .cmd file, which needs a shell. Pass one command string (not args) to avoid Node's DEP0190 warning.
+  const child =
+    process.platform === 'win32'
+      ? spawn(`${npm} run dev`, { cwd: path.join(root, cwd), shell: true, env: process.env })
+      : spawn(npm, ['run', 'dev'], { cwd: path.join(root, cwd), env: process.env });
   const prefix = `${colors[name]}[${name}]\x1b[0m `;
   const pipe = (stream, out) => {
     let buf = '';
