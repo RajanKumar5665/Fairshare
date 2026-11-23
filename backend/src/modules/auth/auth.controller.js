@@ -1,4 +1,13 @@
-import { registerSchema, loginSchema, adminRegisterSchema, adminLoginSchema } from './auth.validation.js';
+import {
+  registerSchema,
+  loginSchema,
+  adminRegisterSchema,
+  adminLoginSchema,
+  forgotPasswordSchema,
+  verifyResetCodeSchema,
+  resetPasswordSchema,
+} from './auth.validation.js';
+import { requestPasswordReset, verifyResetCode, resetPassword } from './passwordReset.service.js';
 import { registerUser, loginUser, registerAdmin, loginAdmin, getUserById } from './auth.service.js';
 import { sendOtp, verifyOtp, createMobileUser } from './otp.service.js';
 import { generateAccessToken } from '../../utils/token.js';
@@ -225,5 +234,49 @@ export async function otpVerify(req, res, next) {
     });
   } catch (err) {
     next(err);
+  }
+}
+
+// --- Forgot password: email code -> verify -> new password -----------------
+export async function forgotPassword(req, res, next) {
+  try {
+    const { error, value } = forgotPasswordSchema.validate(req.body);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    await requestPasswordReset(value.email);
+    // Same answer whether or not the email has an account
+    res.json({ success: true, message: 'If an account uses this email, a 6-digit code is on its way.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function verifyPasswordResetCode(req, res, next) {
+  try {
+    const { error, value } = verifyResetCodeSchema.validate(req.body);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    const resetToken = await verifyResetCode(value.email, value.code);
+    res.json({ success: true, resetToken });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function resetPasswordWithToken(req, res, next) {
+  try {
+    const { error, value } = resetPasswordSchema.validate(req.body);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+    const { email } = await resetPassword(value.resetToken, value.password);
+    clearRefreshCookieSafe(res);
+    res.json({ success: true, email, message: 'Password changed. Please log in with your new password.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+function clearRefreshCookieSafe(res) {
+  try {
+    res.clearCookie('refreshToken', { ...cookieOptions, maxAge: undefined });
+  } catch {
+    /* ignore */
   }
 }

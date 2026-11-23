@@ -996,3 +996,32 @@ textarea.d-input { resize: vertical; min-height: 84px; font-family: inherit; }
 @media (min-width: 900px) {
   .ax-summary-top { flex-direction: column; align-items: flex-start; gap: 10px; }
 }
+/* ── Forgot password ───────────────────────────────────────────────── */
+.fp-panel { position: relative; }
+.fp-back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .85rem; font-weight: 600; text-decoration: none; }
+.fp-back:hover { color: var(--brand); }
+.fp-icon { width: 58px; height: 58px; margin: 14px auto 12px; display: grid; place-items: center; border-radius: 18px; background: var(--brand-soft); color: var(--brand); }
+.fp-title { text-align: center; margin: 0 0 6px; font-size: 1.35rem; }
+.fp-sub { text-align: center; margin: 0 0 18px; line-height: 1.55; }
+.fp-email { color: var(--ink); overflow-wrap: anywhere; }
+.fp-steps { list-style: none; margin: 0 0 20px; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.fp-steps li { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: .72rem; font-weight: 600; color: var(--muted); text-align: center; }
+.fp-steps li span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--line); background: var(--bg-2); font-size: .78rem; font-weight: 800; }
+.fp-steps li.on { color: var(--brand); }
+.fp-steps li.on span { border-color: var(--brand); background: var(--brand); color: #fff; }
+.fp-steps li.done { color: var(--success); }
+.fp-steps li.done span { border-color: var(--success); background: var(--success); color: #fff; }
+.fp-btn { justify-content: center; min-height: 46px; margin-top: 4px; }
+.fp-code { text-align: center; font: 800 1.7rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .55em; padding-left: calc(14px + .55em) !important; }
+.fp-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.fp-link { background: none; border: 0; padding: 4px 0; color: var(--brand); font: inherit; font-weight: 600; font-size: .88rem; cursor: pointer; }
+.fp-link:disabled { opacity: .5; cursor: default; }
+.fp-eye { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: 0; cursor: pointer; color: var(--muted); padding: 4px; display: flex; }
+.fp-strength { display: flex; flex-direction: column; gap: 4px; margin-top: -4px; }
+.fp-strength > span { height: 5px; border-radius: 5px; background: var(--line); position: relative; overflow: hidden; }
+.fp-strength > span::after { content: ""; position: absolute; inset: 0 auto 0 0; border-radius: 5px; transition: width .2s ease; }
+.fp-strength.weak > span::after { width: 30%; background: var(--danger); }
+.fp-strength.ok > span::after { width: 65%; background: var(--warn); }
+.fp-strength.strong > span::after { width: 100%; background: var(--success); }
+.fp-strength small { font-size: .74rem; color: var(--muted); }
+.fp-err { color: var(--danger); font-size: .78rem; margin-top: -4px; }

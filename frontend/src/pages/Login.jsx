@@ -54,9 +54,10 @@ function EmailLogin({ redirectUrl }) {
   const { login } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
 
   const [form, setForm] = useState({
-    email: '',
+    email: params.get('email') || '', // filled in after a password reset
     password: '',
   });
 
@@ -117,7 +118,15 @@ function EmailLogin({ redirectUrl }) {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="password-input">{t('Password')}</label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+          <label htmlFor="password-input">{t('Password')}</label>
+          <Link
+            to={`/forgot-password${form.email ? `?email=${encodeURIComponent(form.email)}` : ''}`}
+            style={{ color: 'var(--brand)', fontWeight: 600, fontSize: '0.85rem' }}
+          >
+            {t('Forgot password?')}
+          </Link>
+        </div>
 
         <div style={{ position: 'relative' }}>
           <input

@@ -10,6 +10,9 @@ import {
   otpSend,
   otpVerify,
   googleAuth,
+  forgotPassword,
+  verifyPasswordResetCode,
+  resetPasswordWithToken,
 } from './auth.controller.js';
 import { protect } from '../../middlewares/auth.middleware.js';
 import { env } from '../../config/env.js';
@@ -52,5 +55,20 @@ router.post('/otp/verify', otpVerifyLimiter, otpVerify);
 
 // Google OAuth route
 router.post('/google', googleAuth);
+
+// Forgot password (email code)
+const resetSendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: env.NODE_ENV === 'development' ? 100 : 5,
+  message: { success: false, message: 'Too many reset requests. Try again in 15 minutes.' },
+});
+const resetVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: env.NODE_ENV === 'development' ? 200 : 15,
+  message: { success: false, message: 'Too many tries. Try again in 15 minutes.' },
+});
+router.post('/password/forgot', resetSendLimiter, forgotPassword);
+router.post('/password/verify', resetVerifyLimiter, verifyPasswordResetCode);
+router.post('/password/reset', resetVerifyLimiter, resetPasswordWithToken);
 
 export default router;

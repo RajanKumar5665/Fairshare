@@ -112,6 +112,7 @@ export async function api(path, options = {}) {
     path.includes('/auth/register') ||
     path.includes('/auth/refresh') ||
     path.includes('/auth/otp') ||
+    path.includes('/auth/password') ||
     path.includes('/auth/google');
 
   if (res.status === 401 && !isAuthRequest) {

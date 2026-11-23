@@ -7,6 +7,7 @@ import InstallPrompt from './components/InstallPrompt';
 // Lazy-loaded routes for ultra-fast first load
 const Login = React.lazy(() => import('./pages/Login'));
 const Register = React.lazy(() => import('./pages/Register'));
+const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Rooms = React.lazy(() => import('./pages/Rooms'));
 const RoomDetail = React.lazy(() => import('./pages/RoomDetail'));
@@ -46,6 +47,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/admin/*" element={<AdminApp />} />

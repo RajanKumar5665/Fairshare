@@ -56,6 +56,14 @@ const envSchema = Joi.object({
         .optional()
         .allow(''),
 
+    // Email (used for "Forgot password" codes). Gmail: SMTP_USER = your Gmail,
+    // SMTP_PASS = a 16-letter Google "App password" (not your normal password).
+    SMTP_HOST: Joi.string().default('smtp.gmail.com'),
+    SMTP_PORT: Joi.number().default(465),
+    SMTP_USER: Joi.string().optional().allow(''),
+    SMTP_PASS: Joi.string().optional().allow(''),
+    MAIL_FROM: Joi.string().optional().allow(''),
+
 }).unknown(true);
 
 const { error, value } = envSchema.validate(process.env, {
