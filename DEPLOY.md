@@ -203,6 +203,16 @@ Do jobs dikhengi:
 
 ---
 
+## Live setup (current)
+
+- Main address: **https://splitcircle.duckdns.org** (free DuckDNS name → `15.134.37.177`).
+  The bare IP, `http://` and `15-134-37-177.sslip.io` all redirect there.
+- The live Nginx file is [`deploy/nginx-fairshare-https.conf`](deploy/nginx-fairshare-https.conf).
+  ⚠️ Running `setup-server.sh` again would replace it with the plain-http template — copy this file back afterwards:
+  `sudo cp deploy/nginx-fairshare-https.conf /etc/nginx/sites-available/fairshare && sudo nginx -t && sudo systemctl reload nginx`
+- Certificates renew by themselves (certbot timer). Check with `sudo certbot renew --dry-run`.
+- If the server IP ever changes: update the IP on duckdns.org (keep an Elastic IP attached to avoid this).
+
 ## Roz ka kaam
 
 - Code badla → `git push origin main` → 3–5 min me live. Bas.
