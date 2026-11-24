@@ -82,7 +82,7 @@ function pdfHeader(doc, title, subtitle) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.text(subtitle, 40, 50);
-  doc.text('FairShare', w - 40, 32, { align: 'right' });
+  doc.text('SplitCircle', w - 40, 32, { align: 'right' });
   doc.setTextColor(23, 43, 77);
   return 88;
 }

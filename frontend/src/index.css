@@ -2080,12 +2080,12 @@ body {
   background:
     radial-gradient(
       ellipse 110% 55% at 10% -10%,
-      rgba(23, 105, 224, 0.09),
+      color-mix(in srgb, var(--brand) 9%, transparent),
       transparent 55%
     ),
     radial-gradient(
       ellipse 90% 45% at 95% 0%,
-      rgba(74, 148, 255, 0.06),
+      color-mix(in srgb, var(--brand-2) 6%, transparent),
       transparent 50%
     ),
     var(--bg);
@@ -2100,7 +2100,7 @@ body {
   background:
     radial-gradient(
       ellipse 110% 55% at 10% -10%,
-      rgba(74, 148, 255, 0.09),
+      color-mix(in srgb, var(--brand-2) 9%, transparent),
       transparent 55%
     ),
     var(--bg);
@@ -2117,29 +2117,29 @@ body {
 .brand-mark {
   background: linear-gradient(
     135deg,
-    #70ABFF 0%,
-    #1769E0 100%
+    var(--brand-2) 0%,
+    var(--brand) 100%
   );
 
-  box-shadow: 0 4px 16px rgba(23, 105, 224, 0.35);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--brand) 35%, transparent);
 }
 
 .user-avatar {
   background: linear-gradient(
     135deg,
-    #70ABFF,
-    #1769E0
+    var(--brand-2),
+    var(--brand)
   );
 }
 
 /* SIDEBAR NAVIGATION */
 .nav-item.active {
-  background: rgba(74, 148, 255, 0.18);
+  background: color-mix(in srgb, var(--brand-2) 18%, transparent);
   color: #80B5FF;
 }
 
 .nav-item.active::before {
-  background: #70ABFF;
+  background: var(--brand-2);
 }
 
 .nav-item:hover {
@@ -2284,12 +2284,12 @@ textarea:focus {
   background:
     radial-gradient(
       ellipse at 12% 8%,
-      rgba(23, 105, 224, 0.13),
+      color-mix(in srgb, var(--brand) 13%, transparent),
       transparent 38%
     ),
     radial-gradient(
       ellipse at 88% 90%,
-      rgba(74, 148, 255, 0.09),
+      color-mix(in srgb, var(--brand-2) 9%, transparent),
       transparent 35%
     ),
     var(--bg);
@@ -2305,19 +2305,19 @@ textarea:focus {
 .loader-brand {
   background: linear-gradient(
     135deg,
-    #70ABFF,
-    #1769E0
+    var(--brand-2),
+    var(--brand)
   );
 
-  box-shadow: 0 8px 32px rgba(23, 105, 224, 0.35);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--brand) 35%, transparent);
 }
 
 /* PROFILE AVATAR */
 .profile-avatar-lg {
   background: linear-gradient(
     135deg,
-    #70ABFF,
-    #1769E0
+    var(--brand-2),
+    var(--brand)
   );
 
   box-shadow: 0 8px 24px var(--brand-glow);

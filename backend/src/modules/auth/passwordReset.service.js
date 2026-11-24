@@ -24,13 +24,13 @@ const sameHash = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffe
 function codeEmail(name, code) {
   const text =
     `Hi ${name || 'there'},\n\n` +
-    `Your FairShare password reset code is: ${code}\n\n` +
+    `Your SplitCircle password reset code is: ${code}\n\n` +
     `It works for ${CODE_MINUTES} minutes. If you didn't ask to reset your password, you can ignore this email — your password stays the same.\n\n` +
-    `— FairShare`;
+    `— SplitCircle`;
   const html = `
   <div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:460px;margin:auto;padding:24px;color:#172B4D">
     <h2 style="margin:0 0 8px">Reset your password</h2>
-    <p style="margin:0 0 18px;color:#64748B">Hi ${String(name || 'there').replace(/[<>&"]/g, '')}, use this code in the FairShare app:</p>
+    <p style="margin:0 0 18px;color:#64748B">Hi ${String(name || 'there').replace(/[<>&"]/g, '')}, use this code in the SplitCircle app:</p>
     <div style="font-size:34px;font-weight:800;letter-spacing:10px;text-align:center;padding:16px;border-radius:14px;background:#E8F1FF;color:#1253B5">${code}</div>
     <p style="margin:18px 0 0;color:#64748B;font-size:14px">The code works for ${CODE_MINUTES} minutes.<br>Didn't ask for this? Ignore this email — your password stays the same.</p>
   </div>`;
@@ -62,7 +62,7 @@ export async function requestPasswordReset(email) {
   });
 
   try {
-    await sendMail({ to: user.email, subject: `${code} is your FairShare reset code`, ...codeEmail(user.name, code) });
+    await sendMail({ to: user.email, subject: `${code} is your SplitCircle reset code`, ...codeEmail(user.name, code) });
   } catch (err) {
     await PasswordReset.deleteOne({ _id: reset._id }); // let them try again straight away
     throw err;

@@ -60,7 +60,7 @@ export async function openRazorpaySubscriptionCheckout({
     key: orderData.keyId,
     amount: orderData.amount, // in smallest currency unit (paise)
     currency: orderData.currency || 'INR',
-    name: 'FairShare',
+    name: 'SplitCircle',
     description: isOneRupee
       ? 'Room Creation & Flat Share Plan — First Month Offer (₹1)'
       : 'Room Plan Monthly Subscription Renewal (₹50)',

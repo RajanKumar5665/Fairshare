@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import GoogleLoginButton from '../components/GoogleLoginButton';
+import Logo from '../components/Logo';
 import { useLanguage } from '../context/LanguageContext';
 import {
   HiOutlineEye,
@@ -234,12 +235,10 @@ export default function Login() {
           className="brand"
           style={{ justifyContent: 'center', marginBottom: 24 }}
         >
-          <div className="brand-mark" aria-hidden="true">
-            F
-          </div>
+          <div className="brand-mark sc-mark" aria-hidden="true"><Logo size={44} /></div>
 
           <span className="brand-copy" style={{ color: 'var(--ink)' }}>
-            <strong>FairShare</strong>
+            <strong>SplitCircle</strong>
             <small style={{ color: 'var(--muted)' }}>{t('Split bills, stay even')}</small>
           </span>
         </div>

@@ -116,7 +116,7 @@ export default function Join() {
   function applyScanned(text) {
     const c = cleanToken(text);
     if (!c || c.length < 10 || c.length > 64) {
-      toast.error('That QR is not a FairShare group invite');
+      toast.error('That QR is not a SplitCircle group invite');
       return;
     }
     setToken(c);

@@ -41,7 +41,7 @@ export async function sendMail({ to, subject, text, html }) {
   }
   try {
     await getTransporter().sendMail({
-      from: env.MAIL_FROM || `FairShare <${env.SMTP_USER}>`,
+      from: env.MAIL_FROM || `SplitCircle <${env.SMTP_USER}>`,
       to,
       subject,
       text,

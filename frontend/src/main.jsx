@@ -8,6 +8,7 @@ import { LanguageProvider } from './context/LanguageContext';
 import './tailwind.css';
 import './index.css';
 import './room-ui.css';
+import './theme.css';
 import App from './App.jsx';
 
 // Remove the previous service worker's cache of authenticated expense data.
@@ -47,7 +48,7 @@ createRoot(document.getElementById('root')).render(
               },
               success: {
                 className: 'custom-toast-popup toast-success',
-                iconTheme: { primary: '#1769E0', secondary: '#ffffff' },
+                iconTheme: { primary: 'var(--brand)', secondary: '#ffffff' },
               },
               error: {
                 duration: 4800,
@@ -56,7 +57,7 @@ createRoot(document.getElementById('root')).render(
               },
               loading: {
                 className: 'custom-toast-popup toast-loading',
-                iconTheme: { primary: '#3285F5', secondary: '#ffffff' },
+                iconTheme: { primary: 'var(--brand)', secondary: '#ffffff' },
               },
             }}
           />

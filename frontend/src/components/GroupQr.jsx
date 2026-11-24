@@ -43,7 +43,7 @@ async function buildCard({ url, title, subtitle, code }) {
 
   ctx.fillStyle = '#64748b';
   ctx.font = '400 24px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-  ctx.fillText('Scan with your phone camera to join on FairShare', W / 2, 870);
+  ctx.fillText('Scan with your phone camera to join on SplitCircle', W / 2, 870);
   ctx.fillText('or open the app → Join → enter the code', W / 2, 906);
 
   return c;
@@ -90,7 +90,7 @@ export default function GroupQr({ url, roomName, code, groupType }) {
       const blob = await toBlob(card);
       const file = new File([blob], fileName, { type: 'image/png' });
       if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: roomName, text: t('Scan to join "{name}" on FairShare', { name: roomName }) });
+        await navigator.share({ files: [file], title: roomName, text: t('Scan to join "{name}" on SplitCircle', { name: roomName }) });
         return;
       }
     } catch (err) {

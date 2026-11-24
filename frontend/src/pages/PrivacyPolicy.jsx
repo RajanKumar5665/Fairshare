@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <div className="brand">
             
-            <span>FairShare</span>
+            <span>SplitCircle</span>
           </div>
           <Link to="/" className="relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-xl border-0 bg-[var(--brand)] px-[18px] py-[11px] text-[.95rem] font-semibold text-white transition-all hover:shadow-[0_4px_16px_var(--brand-glow)] active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50 bg-[var(--brand-soft)] text-[var(--brand)] shadow-none hover:bg-[var(--brand-soft)]" style={{ fontSize: '0.85rem', padding: '6px 12px' }}>
             ← Back to App
@@ -23,7 +23,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 style={{ fontSize: '1.2rem', marginBottom: 8, color: 'var(--brand)' }}>1. Overview</h2>
             <p className="text-sm">
-              FairShare (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) respects your privacy. This Privacy Policy describes how we collect, use, and protect your information when you access or use the FairShare web and mobile Progressive Web App (PWA).
+              SplitCircle (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) respects your privacy. This Privacy Policy describes how we collect, use, and protect your information when you access or use the SplitCircle web and mobile Progressive Web App (PWA).
             </p>
           </section>
 

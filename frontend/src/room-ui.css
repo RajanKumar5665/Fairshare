@@ -701,7 +701,7 @@ textarea.d-input { resize: vertical; min-height: 84px; font-family: inherit; }
   border-radius: 16px; border: 1.5px dashed var(--brand); background: var(--brand-soft); color: var(--ink); font: inherit;
   transition: transform .12s ease, box-shadow .12s ease;
 }
-.gq-scan-cta:hover { box-shadow: 0 6px 18px rgba(79,70,229,.18); }
+.gq-scan-cta:hover { box-shadow: 0 6px 18px var(--brand-glow); }
 .gq-scan-cta:active { transform: scale(.99); }
 .gq-scan-cta-ico { width: 52px; height: 52px; flex-shrink: 0; display: grid; place-items: center; border-radius: 14px; background: var(--brand); color: #fff; }
 .gq-scan-cta-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }

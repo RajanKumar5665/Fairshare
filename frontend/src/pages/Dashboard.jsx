@@ -177,7 +177,7 @@ export default function Dashboard() {
         <section className="d-hero">
           <div className="d-hero-copy">
             <p className="d-greet">{t('Loading…')}</p>
-            <h1 className="d-name">FairShare</h1>
+            <h1 className="d-name">SplitCircle</h1>
           </div>
           <div className="d-balance">
             <span className="d-balance-label">{t('This month')}</span>

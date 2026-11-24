@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
+import ThemePicker from '../components/ThemePicker';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
@@ -17,7 +17,6 @@ import {
 
 export default function Profile() {
   const { user, logout, refreshUser } = useAuth();
-  const { theme, toggle } = useTheme();
   const { lang, setLang, t } = useLanguage();
   const navigate = useNavigate();
 
@@ -464,26 +463,8 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Theme Toggle */}
-          <button
-            type="button"
-            className="settings-row"
-            onClick={toggle}
-            id="profile-theme-toggle"
-          >
-            <div className="settings-row-copy">
-              {theme === 'dark' ? <HiSun size={20} /> : <HiMoon size={20} />}
-              <div>
-                <div className="text-sm font-bold">
-                  {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-                </div>
-                <div className="text-xs muted">Switch appearance</div>
-              </div>
-            </div>
-            <span className={`settings-switch ${theme === 'dark' ? 'on' : ''}`} aria-hidden="true">
-              <span className="settings-switch-knob" />
-            </span>
-          </button>
+          {/* Appearance: light/dark/system + app colour */}
+          <ThemePicker />
 
           {/* Logout */}
           <button

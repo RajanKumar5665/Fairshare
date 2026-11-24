@@ -1,43 +1,96 @@
 <!doctype html>
-<html lang="en-IN">
+<html lang="en-IN" data-theme="light" data-accent="ocean">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>FairShare - Expense Tracker &amp; Bill Splitter</title>
-    <meta name="description" content="FairShare helps you track personal expenses and split bills with friends, roommates, and travel groups." />
-    <meta name="keywords" content="expense tracker, bill splitter, hisab, khata, split expenses, group expenses India" />
-    <meta name="author" content="FairShare" />
-    <meta name="theme-color" content="#1769E0" />
+    <title>SplitCircle — Split bills with roommates, trips &amp; friends</title>
+    <meta name="description" content="SplitCircle splits shared expenses fairly. Add bills, let everyone approve them, and see who pays whom at the end of the month or trip." />
+    <meta name="keywords" content="SplitCircle, bill splitter, split expenses, roommates expenses, trip expenses, hisab, khata, India" />
+    <meta name="application-name" content="SplitCircle" />
+    <meta name="theme-color" content="#F2F6FD" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="FairShare" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SplitCircle" />
+    <meta name="format-detection" content="telephone=no" />
 
-    <!-- Performance: DNS Prefetch & Preconnect to Backend & Fonts -->
-    <link rel="dns-prefetch" href="https://fairshare-6011.onrender.com" />
-    <link rel="preconnect" href="https://fairshare-6011.onrender.com" crossorigin />
+    <!-- Apply the saved theme before anything is drawn (no colour flash) -->
+    <script>
+      (function () {
+        var bars = {
+          ocean: ['#F2F6FD', '#0B111C'], emerald: ['#F1F8F5', '#09110F'],
+          violet: ['#F6F3FD', '#0F0C17'], sunset: ['#FCF5F1', '#130E0B']
+        };
+        try {
+          var mode = localStorage.getItem('sc-mode') || localStorage.getItem('hh-theme') || 'system';
+          var accent = localStorage.getItem('sc-accent');
+          if (!bars[accent]) accent = 'ocean';
+          var dark = mode === 'dark' || (mode === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          root.setAttribute('data-theme', dark ? 'dark' : 'light');
+          root.setAttribute('data-accent', accent);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', bars[accent][dark ? 1 : 0]);
+        } catch (e) {}
+      })();
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-    <!-- Open Graph -->
+    <!-- Open Graph (link previews in WhatsApp etc.) -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="FairShare — Expense Tracker" />
-    <meta property="og:description" content="Track expenses and split bills with your friends and groups." />
-    <meta property="og:image" content="/screenshot-wide.png" />
+    <meta property="og:site_name" content="SplitCircle" />
+    <meta property="og:title" content="SplitCircle — split bills fairly with your circle" />
+    <meta property="og:description" content="Roommates, trips and friend groups: add expenses, approve them together, and settle up in one tap." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
 
     <!-- Icons -->
-    <link rel="icon" type="image/png" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Fonts (Non-blocking with swap) -->
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap"
       rel="stylesheet"
     />
+
+    <style>
+      /* Splash shown instantly while the app downloads (replaced when the app starts) */
+      html { background: #F3F6FB; }
+      html[data-theme="dark"] { background: #0B0E14; }
+      .boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      .boot svg { width: 84px; height: 84px; filter: drop-shadow(0 14px 26px rgba(23, 105, 224, .28)); animation: boot-pop .7s cubic-bezier(.2,.9,.3,1.2) both; }
+      .boot strong { font-size: 22px; font-weight: 800; letter-spacing: -.02em; color: #14213D; }
+      html[data-theme="dark"] .boot strong { color: #F2F4F8; }
+      html[data-accent="emerald"] .boot .t1 { stop-color: #10B981; } html[data-accent="emerald"] .boot .t2 { stop-color: #047857; }
+      html[data-accent="violet"] .boot .t1 { stop-color: #8B5CF6; } html[data-accent="violet"] .boot .t2 { stop-color: #6D28D9; }
+      html[data-accent="sunset"] .boot .t1 { stop-color: #F97316; } html[data-accent="sunset"] .boot .t2 { stop-color: #C2410C; }
+      @keyframes boot-pop { from { opacity: 0; transform: scale(.6) rotate(-30deg); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) { .boot svg { animation: none; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <!-- Razorpay Checkout SDK is loaded dynamically on demand in razorpay.js when payment is triggered -->
+    <div id="root">
+      <div class="boot" aria-label="Loading SplitCircle">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <defs>
+            <linearGradient id="bootg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" class="t1" stop-color="#3B82F6" /><stop offset="1" class="t2" stop-color="#1250B0" />
+            </linearGradient>
+          </defs>
+          <rect width="100" height="100" rx="26" fill="url(#bootg)" />
+          <circle cx="50" cy="50" r="24" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="35.27 15" stroke-dashoffset="-7.5" transform="rotate(-90 50 50)" />
+          <circle cx="50" cy="50" r="8" fill="#fff" />
+        </svg>
+        <strong>SplitCircle</strong>
+      </div>
+    </div>
+    <noscript>SplitCircle needs JavaScript to run. Please enable it in your browser.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

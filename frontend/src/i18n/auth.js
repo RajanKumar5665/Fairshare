@@ -27,7 +27,7 @@ export default {
 
     // Register
     'Password must be at least 8 characters long': 'Password kam se kam 8 characters ka hona chahiye',
-    'Account created successfully! Welcome to FairShare 🎉': 'Account ban gaya! FairShare mein swagat hai 🎉',
+    'Account created successfully! Welcome to SplitCircle 🎉': 'Account ban gaya! SplitCircle mein swagat hai 🎉',
     'Registration failed': 'Registration nahi ho paaya',
     'Create your account': 'Apna account banao',
     'Start managing expenses and splitting bills with friends': 'Doston ke saath kharche manage karo aur bill baanto',
@@ -80,7 +80,7 @@ export default {
 
     // Register
     'Password must be at least 8 characters long': 'पासवर्ड कम से कम 8 अक्षरों का होना चाहिए',
-    'Account created successfully! Welcome to FairShare 🎉': 'खाता बन गया! FairShare में आपका स्वागत है 🎉',
+    'Account created successfully! Welcome to SplitCircle 🎉': 'खाता बन गया! SplitCircle में आपका स्वागत है 🎉',
     'Registration failed': 'रजिस्ट्रेशन नहीं हो सका',
     'Create your account': 'अपना खाता बनाएँ',
     'Start managing expenses and splitting bills with friends': 'दोस्तों के साथ खर्चे संभालें और बिल बाँटें',

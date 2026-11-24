@@ -907,10 +907,10 @@ function InviteSheet({ roomId, roomName, groupType, onClose }) {
   const inviteVars = { name: roomName, url, code: formatInviteCode(code) };
   const message =
     groupType === 'trip'
-      ? t('Join our trip "{name}" on FairShare to split expenses 👇\n{url}\n\nOr open the app → Join → code: {code}', inviteVars)
+      ? t('Join our trip "{name}" on SplitCircle to split expenses 👇\n{url}\n\nOr open the app → Join → code: {code}', inviteVars)
       : groupType === 'group'
-        ? t('Join our group "{name}" on FairShare to split expenses 👇\n{url}\n\nOr open the app → Join → code: {code}', inviteVars)
-        : t('Join our flat "{name}" on FairShare to split expenses 👇\n{url}\n\nOr open the app → Join → code: {code}', inviteVars);
+        ? t('Join our group "{name}" on SplitCircle to split expenses 👇\n{url}\n\nOr open the app → Join → code: {code}', inviteVars)
+        : t('Join our flat "{name}" on SplitCircle to split expenses 👇\n{url}\n\nOr open the app → Join → code: {code}', inviteVars);
 
   async function copy(text, field) {
     try {

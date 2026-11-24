@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import InstallPrompt from './components/InstallPrompt';
+import Logo from './components/Logo';
 
 // Lazy-loaded routes for ultra-fast first load
 const Login = React.lazy(() => import('./pages/Login'));
@@ -16,13 +17,14 @@ const Profile = React.lazy(() => import('./pages/Profile'));
 const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = React.lazy(() => import('./pages/TermsOfService'));
 const AdminApp = React.lazy(() => import('./admin/App'));
+const Welcome = React.lazy(() => import('./pages/Welcome'));
 
 function PageLoader() {
   return (
     <div className="page-loader">
-      <div className="page-loader-inner">
-        <div className="loader-brand">F</div>
-        <p className="muted text-sm">Loading FairShare…</p>
+      <div className="sc-splash" role="status" aria-label="Loading SplitCircle">
+        <Logo size={84} />
+        <strong>SplitCircle</strong>
       </div>
     </div>
   );
@@ -34,6 +36,8 @@ function Protected({ children }) {
 
   if (loading) return <PageLoader />;
   if (!user) {
+    // First visit to the app's home: show the welcome screen instead of a bare login form
+    if (location.pathname === '/' && !location.search.includes('action=')) return <Welcome />;
     const returnUrl = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${returnUrl}`} replace />;
   }

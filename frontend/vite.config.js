@@ -9,52 +9,63 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['screenshot-wide.png', 'pwa-192x192.png', 'pwa-512x512.png', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png', 'logo.svg'],
       manifest: {
-        name: 'FairShare - Expense Tracker',
-        short_name: 'FairShare',
-        description: 'Track personal expenses and split bills with friends',
+        id: '/',
+        name: 'SplitCircle — split bills fairly',
+        short_name: 'SplitCircle',
+        description:
+          'Split shared expenses with roommates, trips and friends. Everyone approves each bill, and SplitCircle shows who pays whom.',
         theme_color: '#1769E0',
-        background_color: '#F3F7FF',
+        background_color: '#F3F6FB',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        start_url: '/?source=pwa',
+        launch_handler: { client_mode: 'focus-existing' },
         icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png',
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'pwa-maskable-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: 'pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // Shown in Chrome's richer install sheet
+        screenshots: [
+          { src: 'screenshot-phone-1.png', sizes: '780x1688', type: 'image/png', form_factor: 'narrow', label: 'Your groups and balances' },
+          { src: 'screenshot-phone-2.png', sizes: '780x1688', type: 'image/png', form_factor: 'narrow', label: 'Expenses split and approved together' },
+          { src: 'screenshot-wide.png', sizes: '1366x768', type: 'image/png', form_factor: 'wide', label: 'SplitCircle on a computer' },
+        ],
+        // Long-press the app icon for these
         shortcuts: [
           {
-            name: 'Add Expense',
+            name: 'Add an expense',
             short_name: 'Add',
-            description: 'Quickly add a personal expense',
             url: '/?action=add',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
           },
           {
-            name: 'View Rooms',
-            short_name: 'Rooms',
-            description: 'Open your shared rooms',
+            name: 'My groups',
+            short_name: 'Groups',
             url: '/rooms',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+          },
+          {
+            name: 'Scan a QR to join',
+            short_name: 'Join',
+            url: '/join',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
           },
         ],
-        categories: ['finance', 'productivity'],
+        categories: ['finance', 'productivity', 'lifestyle'],
         lang: 'en-IN',
+        dir: 'ltr',
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // jsPDF's optional helpers (HTML/SVG rendering) are never used here; keep them out of the install.
-        globIgnores: ['**/html2canvas*.js', '**/purify.es*.js', '**/index.es-*.js'],
+        // Install-sheet screenshots and the link-preview image aren't needed offline.
+        globIgnores: ['**/html2canvas*.js', '**/purify.es*.js', '**/index.es-*.js', '**/screenshot-*.png', '**/og-image.png'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

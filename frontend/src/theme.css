@@ -1,0 +1,170 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SplitCircle — themes + app shell
+   <html data-theme="light|dark" data-accent="ocean|emerald|violet|sunset">
+   Loaded last, so it overrides index.css / room-ui.css tokens.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Accent colours ───────────────────────────────────────────────────────── */
+:root[data-accent="ocean"],   :root:not([data-accent]) { --brand: #1769E0; --brand-2: #3B82F6; --brand-3: #1250B0; }
+:root[data-accent="emerald"] { --brand: #059669; --brand-2: #10B981; --brand-3: #047857; }
+:root[data-accent="violet"]  { --brand: #7C3AED; --brand-2: #8B5CF6; --brand-3: #6D28D9; }
+:root[data-accent="sunset"]  { --brand: #E8590C; --brand-2: #F97316; --brand-3: #C2410C; }
+
+:root[data-theme="dark"][data-accent="ocean"],
+:root[data-theme="dark"]:not([data-accent]) { --brand: #4C8DFF; --brand-2: #7DAEFF; --brand-3: #2F6FE0; }
+:root[data-theme="dark"][data-accent="emerald"] { --brand: #1DB385; --brand-2: #4FD1A5; --brand-3: #0E9670; }
+:root[data-theme="dark"][data-accent="violet"]  { --brand: #9575F5; --brand-2: #B39DFA; --brand-3: #7A55EC; }
+:root[data-theme="dark"][data-accent="sunset"]  { --brand: #F57C34; --brand-2: #FB9D5F; --brand-3: #DD6419; }
+
+/* ── Surfaces, text and lines, tinted by the accent ──────────────────────── */
+:root {
+  --bg: color-mix(in srgb, var(--brand) 5%, #F6F7F9);
+  --bg-2: #FFFFFF;
+  --bg-3: color-mix(in srgb, var(--brand) 8%, #FFFFFF);
+  --ink: color-mix(in srgb, var(--brand) 14%, #111827);
+  --ink-2: color-mix(in srgb, var(--brand) 12%, #344054);
+  --muted: color-mix(in srgb, var(--brand) 10%, #667085);
+  --line: color-mix(in srgb, var(--brand) 12%, #E4E7EC);
+  --card: #FFFFFF;
+  --card-hover: color-mix(in srgb, var(--brand) 3%, #FFFFFF);
+  --brand-soft: color-mix(in srgb, var(--brand) 11%, #FFFFFF);
+  --brand-glow: color-mix(in srgb, var(--brand) 24%, transparent);
+  --sidebar-bg: color-mix(in srgb, var(--brand-3) 40%, #0B1220);
+  --sidebar-ink: #F4F7FB;
+  --radius-app: 18px;
+}
+:root[data-theme="dark"] {
+  --bg: color-mix(in srgb, var(--brand) 6%, #0A0C11);
+  --bg-2: color-mix(in srgb, var(--brand) 8%, #10131A);
+  --bg-3: color-mix(in srgb, var(--brand) 12%, #151923);
+  --ink: #F2F4F8;
+  --ink-2: #D5DAE3;
+  --muted: color-mix(in srgb, var(--brand) 16%, #98A2B3);
+  --line: color-mix(in srgb, var(--brand) 16%, #232937);
+  --card: color-mix(in srgb, var(--brand) 9%, #12161F);
+  --card-hover: color-mix(in srgb, var(--brand) 13%, #171C27);
+  --brand-soft: color-mix(in srgb, var(--brand) 17%, transparent);
+  --brand-glow: color-mix(in srgb, var(--brand) 30%, transparent);
+  --sidebar-bg: color-mix(in srgb, var(--brand) 7%, #07090D);
+  --sidebar-ink: #F2F4F8;
+}
+
+/* ── Native-app feel ──────────────────────────────────────────────────────── */
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+button, a, [role="tab"], .bottom-nav-item { -webkit-touch-callout: none; touch-action: manipulation; }
+@media (display-mode: standalone) {
+  body { user-select: none; -webkit-user-select: none; }
+  input, textarea, [contenteditable], .rx-ellipsis, p, td { user-select: text; -webkit-user-select: text; }
+}
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Every page slides in gently, like moving between app screens */
+/* 'backwards' (not 'both'): once finished, the animation leaves no transform behind — a held transform would break position:fixed buttons inside the page */
+.app-main > * { animation: sc-page-in .26s cubic-bezier(.2, .8, .2, 1) backwards; }
+@keyframes sc-page-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .app-main > * { animation: none; } }
+
+/* Buttons feel pressable */
+.btn-primary, .btn-ghost, .ax-fab, .ax-invite, .jx-scan, .sc-press { transition: transform .12s ease, box-shadow .15s ease, background .15s ease; }
+.btn-primary:active, .btn-ghost:active, .sc-press:active { transform: scale(.97); }
+.btn-primary { background: linear-gradient(135deg, var(--brand-2), var(--brand-3)); }
+
+/* ── Logo / brand ─────────────────────────────────────────────────────────── */
+.sc-logo { display: block; flex-shrink: 0; }
+.brand-mark.sc-mark { background: none !important; box-shadow: 0 6px 16px -6px var(--brand-glow); padding: 0; width: auto; height: auto; border-radius: 12px; }
+.brand-copy strong { letter-spacing: -0.02em; }
+
+/* ── Bottom tab bar (phones) ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .bottom-nav {
+    left: 10px; right: 10px; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); border-radius: 22px;
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .28), 0 2px 6px rgba(0, 0, 0, .06);
+    backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px);
+  }
+  .bottom-nav-inner { padding: 6px !important; gap: 4px; }
+  .bottom-nav-item {
+    min-height: 54px; border-radius: 16px; gap: 3px; font-size: .7rem; font-weight: 700; color: var(--muted);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: background .18s ease, color .18s ease;
+  }
+  .bottom-nav-item svg { transition: transform .18s ease; }
+  .bottom-nav-item.active { color: var(--brand); background: var(--brand-soft); font-weight: 800; }
+  .bottom-nav-item.active::after { display: none; }
+  .bottom-nav-item.active svg { transform: translateY(-1px) scale(1.08); }
+  .bottom-nav-item:active { transform: scale(.96); }
+  /* Floating buttons and page padding sit above the floating bar */
+  .app-main { padding-bottom: calc(var(--bottom-nav-h, 64px) + 40px + env(safe-area-inset-bottom, 0px)) !important; }
+  .ax-fab { bottom: calc(var(--bottom-nav-h, 64px) + 28px + env(safe-area-inset-bottom, 0px)); }
+  .d-fab, .rd-fab { bottom: calc(var(--bottom-nav-h, 64px) + 28px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
+/* ── Loading screen (also used as the app's splash) ───────────────────────── */
+.page-loader { background: var(--bg); }
+.sc-splash { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.sc-splash .sc-logo { animation: sc-pop .7s cubic-bezier(.2, .9, .3, 1.2) both, sc-breathe 1.8s ease-in-out .7s infinite; filter: drop-shadow(0 14px 28px var(--brand-glow)); }
+.sc-splash strong { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.sc-splash small { color: var(--muted); font-size: .85rem; }
+@keyframes sc-pop { from { opacity: 0; transform: scale(.6) rotate(-30deg); } to { opacity: 1; transform: none; } }
+@keyframes sc-breathe { 50% { transform: scale(1.05); } }
+@media (prefers-reduced-motion: reduce) { .sc-splash .sc-logo { animation: none; } }
+
+/* ── Welcome screen (visitors who aren't logged in) ───────────────────────── */
+.wc-page { position: relative; min-height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+  padding: max(28px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)); background: var(--bg); }
+.wc-glow { position: absolute; inset: -30% -20% auto; height: 70%; pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand) 26%, transparent), transparent); filter: blur(10px); }
+.wc-main { position: relative; flex: 1; width: min(100%, 520px); margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.wc-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 4vh; }
+.wc-logo { filter: drop-shadow(0 18px 34px var(--brand-glow)); animation: sc-pop .7s cubic-bezier(.2,.9,.3,1.2) both; }
+.wc-hero h1 { margin: 6px 0 0; font-size: clamp(1.9rem, 7.5vw, 2.6rem); line-height: 1.08; letter-spacing: -0.035em; font-weight: 800; color: var(--ink); }
+.wc-hero h1 span { background: linear-gradient(135deg, var(--brand-2), var(--brand-3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.wc-hero p { margin: 0; max-width: 400px; color: var(--muted); font-size: 1rem; line-height: 1.55; }
+.wc-features { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.wc-feature { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: var(--radius-app); background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--line); backdrop-filter: blur(8px); animation: sc-page-in .45s cubic-bezier(.2,.8,.2,1) both; }
+.wc-feature:nth-child(2) { animation-delay: .05s; } .wc-feature:nth-child(3) { animation-delay: .1s; } .wc-feature:nth-child(4) { animation-delay: .15s; }
+.wc-feature-ico { width: 42px; height: 42px; flex-shrink: 0; display: grid; place-items: center; border-radius: 13px; background: var(--brand-soft); color: var(--brand); }
+.wc-feature h2 { margin: 0 0 3px; font-size: .98rem; color: var(--ink); }
+.wc-feature p { margin: 0; font-size: .84rem; line-height: 1.45; color: var(--muted); }
+.wc-proof { display: inline-flex; align-self: center; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--brand); padding: 6px 12px; border-radius: 999px; background: var(--brand-soft); }
+.wc-actions { position: relative; width: min(100%, 520px); margin: 22px auto 0; display: flex; flex-direction: column; gap: 10px; }
+.wc-cta { justify-content: center; min-height: 52px; border-radius: 16px; font-size: 1rem; text-decoration: none; }
+.wc-join { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px; color: var(--brand); font-weight: 700; font-size: .88rem; text-decoration: none; }
+.wc-legal { display: flex; justify-content: center; gap: 8px; font-size: .75rem; color: var(--muted); }
+.wc-legal a { color: inherit; text-decoration: none; }
+@media (min-width: 720px) {
+  .wc-features { grid-template-columns: 1fr 1fr; }
+  .wc-main, .wc-actions { width: min(100%, 760px); }
+  .wc-actions { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  .wc-cta { flex: 0 1 280px; }
+  .wc-join, .wc-legal { flex-basis: 100%; }
+}
+
+/* Logo in the login / sign-up card and sidebar */
+.auth-panel .brand-mark.sc-mark, .brand .brand-mark.sc-mark { border-radius: 14px; }
+/* ── Appearance picker (Profile) ──────────────────────────────────────────── */
+.tp-card { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-radius: var(--radius-app); background: var(--card); border: 1px solid var(--line); }
+.tp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tp-head h3 { margin: 0; font-size: 1rem; }
+.tp-head small { font-size: .74rem; }
+.tp-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; border-radius: 14px; background: var(--bg-3); }
+.tp-mode { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; border: 0; border-radius: 11px; background: transparent;
+  color: var(--muted); font: inherit; font-weight: 700; font-size: .85rem; cursor: pointer; }
+.tp-mode.on { background: var(--card); color: var(--brand); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.tp-accents { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tp-accent { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 4px; border-radius: 14px; border: 1.5px solid var(--line);
+  background: var(--bg-2); color: var(--ink); font: inherit; cursor: pointer; }
+.tp-accent.on { border-color: var(--sw); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sw) 22%, transparent); }
+.tp-swatch { position: relative; width: 46px; height: 46px; border-radius: 14px; overflow: hidden;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--sw) 70%, #fff), var(--sw)); }
+.tp-swatch-bar { position: absolute; left: 7px; right: 7px; bottom: 8px; height: 6px; border-radius: 6px; background: rgba(255,255,255,.75); }
+.tp-swatch-dot { position: absolute; top: 7px; left: 7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: var(--sw); }
+.tp-name { font-size: .72rem; font-weight: 700; text-align: center; line-height: 1.2; }
+@media (max-width: 360px) { .tp-accents { grid-template-columns: repeat(2, 1fr); } }
+/* Install banner: logo tile instead of a photo */
+.install-banner-icon { background: none !important; padding: 0 !important; overflow: visible !important; }
+.install-banner-icon .sc-logo { filter: drop-shadow(0 6px 12px var(--brand-glow)); }

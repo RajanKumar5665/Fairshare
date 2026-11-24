@@ -7,6 +7,7 @@ import { useOnline } from '../hooks/useOnline';
 import { flushOfflineQueue } from '../utils/offlineQueue';
 import { api } from '../api/client';
 import { useEffect } from 'react';
+import Logo from './Logo';
 import {
   refreshPendingApprovals,
   resetPendingApprovals,
@@ -84,9 +85,9 @@ export default function Layout({ children }) {
         aria-label={t('Main navigation')}
       >
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">F</span>
+          <span className="brand-mark sc-mark" aria-hidden="true"><Logo size={40} /></span>
           <span className="brand-copy">
-            <strong>FairShare</strong>
+            <strong>SplitCircle</strong>
             <small>{t('Split bills, stay even')}</small>
           </span>
         </div>
